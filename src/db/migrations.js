@@ -3,17 +3,17 @@ import pool from '../db/index.js'
 export async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id            SERIAL PRIMARY KEY,
-      telegram_id   BIGINT UNIQUE NOT NULL,
-      username      TEXT,
-      first_name    TEXT,
-      last_name     TEXT,
-      balance_ton   NUMERIC(18, 8) DEFAULT 0,
-      ref_code      TEXT UNIQUE,
-      referred_by   BIGINT REFERENCES users(telegram_id),
-      referral_count INT DEFAULT 0,
-      ton_address   TEXT,
-      created_at    TIMESTAMPTZ DEFAULT NOW()
+      id              SERIAL PRIMARY KEY,
+      telegram_id     BIGINT UNIQUE NOT NULL,
+      username        TEXT,
+      first_name      TEXT,
+      last_name       TEXT,
+      balance_ton     NUMERIC(18, 8) DEFAULT 0,
+      ref_code        TEXT UNIQUE,
+      referred_by     BIGINT REFERENCES users(telegram_id),
+      referral_count  INT DEFAULT 0,
+      ton_address     TEXT,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS stakes (
@@ -29,23 +29,30 @@ export async function runMigrations() {
     );
 
     CREATE TABLE IF NOT EXISTS tasks (
-      id          SERIAL PRIMARY KEY,
-      type        TEXT NOT NULL DEFAULT 'subscribe',
-      title       TEXT NOT NULL,
-      description TEXT,
-      reward      NUMERIC(18, 8) NOT NULL DEFAULT 0.5,
-      icon        TEXT DEFAULT '✈️',
-      link        TEXT,
-      channel_title TEXT,
-      channel_photo TEXT,
-      active      BOOLEAN DEFAULT true,
-      created_at  TIMESTAMPTZ DEFAULT NOW()
+      id              SERIAL PRIMARY KEY,
+      creator_id      INT REFERENCES users(id) DEFAULT NULL,
+      type            TEXT NOT NULL DEFAULT 'subscribe',
+      title           TEXT NOT NULL,
+      description     TEXT,
+      reward          NUMERIC(18, 8) NOT NULL DEFAULT 0.001,
+      price_per_exec  NUMERIC(18, 8) NOT NULL DEFAULT 0.002,
+      ref_bonus       NUMERIC(18, 8) NOT NULL DEFAULT 0.0005,
+      project_fee     NUMERIC(18, 8) NOT NULL DEFAULT 0.0005,
+      icon            TEXT DEFAULT '✈️',
+      link            TEXT,
+      channel_title   TEXT,
+      channel_photo   TEXT,
+      max_executions  INT DEFAULT 100,
+      executions      INT DEFAULT 0,
+      budget          NUMERIC(18, 8) DEFAULT 0,
+      active          BOOLEAN DEFAULT true,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS user_tasks (
-      id          SERIAL PRIMARY KEY,
-      user_id     INT REFERENCES users(id),
-      task_id     INT REFERENCES tasks(id),
+      id           SERIAL PRIMARY KEY,
+      user_id      INT REFERENCES users(id),
+      task_id      INT REFERENCES tasks(id),
       completed_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(user_id, task_id)
     );
@@ -61,11 +68,11 @@ export async function runMigrations() {
     );
 
     CREATE TABLE IF NOT EXISTS referrals (
-      id            SERIAL PRIMARY KEY,
-      referrer_id   INT REFERENCES users(id),
-      referred_id   INT REFERENCES users(id),
-      bonus_paid    BOOLEAN DEFAULT false,
-      created_at    TIMESTAMPTZ DEFAULT NOW()
+      id           SERIAL PRIMARY KEY,
+      referrer_id  INT REFERENCES users(id),
+      referred_id  INT REFERENCES users(id),
+      bonus_paid   BOOLEAN DEFAULT false,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -74,10 +81,17 @@ export async function runMigrations() {
     );
   `)
 
-  // Add new columns if not exist
+  -- Add new columns if not exist
   await pool.query(`
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_title TEXT;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_photo TEXT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS creator_id      INT REFERENCES users(id) DEFAULT NULL;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS price_per_exec  NUMERIC(18,8) NOT NULL DEFAULT 0.002;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ref_bonus       NUMERIC(18,8) NOT NULL DEFAULT 0.0005;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_fee     NUMERIC(18,8) NOT NULL DEFAULT 0.0005;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS max_executions  INT DEFAULT 100;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS executions      INT DEFAULT 0;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS budget          NUMERIC(18,8) DEFAULT 0;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_title   TEXT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_photo   TEXT;
   `)
 
   // Default settings
@@ -86,7 +100,10 @@ export async function runMigrations() {
       ('ref_register_bonus',  '0.5'),
       ('ref_task_percent',    '10'),
       ('ref_deposit_percent', '5'),
-      ('task_reward',         '0.5')
+      ('task_reward',         '0.001'),
+      ('task_price',          '0.002'),
+      ('task_ref_bonus',      '0.0005'),
+      ('task_project_fee',    '0.0005')
     ON CONFLICT (key) DO NOTHING;
   `)
 
