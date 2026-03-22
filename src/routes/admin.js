@@ -32,6 +32,7 @@ router.get('/stats', adminOnly, async (req, res) => {
     const { rows: [stats] } = await pool.query(`
       SELECT
         (SELECT COUNT(*) FROM users) as total_users,
+        (SELECT COUNT(*) FROM users WHERE is_blocked=true) as blocked_users,
         (SELECT COUNT(*) FROM stakes WHERE status='active') as active_stakes,
         (SELECT COALESCE(SUM(amount),0) FROM stakes WHERE status='active') as total_staked,
         (SELECT COUNT(*) FROM referrals) as total_referrals,
@@ -71,13 +72,50 @@ router.delete('/tasks/:id', adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
+// GET /api/admin/users
 router.get('/users', adminOnly, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id,telegram_id,username,first_name,balance_ton,referral_count,created_at FROM users ORDER BY created_at DESC LIMIT 50'
+      'SELECT id,telegram_id,username,first_name,balance_ton,referral_count,is_blocked,created_at FROM users ORDER BY created_at DESC LIMIT 100'
     )
     res.json(rows)
   } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/admin/users/:id/block — заблокировать
+router.post('/users/:id/block', adminOnly, async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET is_blocked=true WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/admin/users/:id/unblock — разблокировать
+router.post('/users/:id/unblock', adminOnly, async (req, res) => {
+  try {
+    await pool.query('UPDATE users SET is_blocked=false WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// DELETE /api/admin/users/:id — удалить
+router.delete('/users/:id', adminOnly, async (req, res) => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query('DELETE FROM user_tasks WHERE user_id=$1', [req.params.id])
+    await client.query('DELETE FROM referrals WHERE referrer_id=$1 OR referred_id=$1', [req.params.id])
+    await client.query('DELETE FROM transactions WHERE user_id=$1', [req.params.id])
+    await client.query("UPDATE stakes SET status='completed' WHERE user_id=$1", [req.params.id])
+    await client.query('DELETE FROM users WHERE id=$1', [req.params.id])
+    await client.query('COMMIT')
+    res.json({ ok: true })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    res.status(500).json({ error: e.message })
+  } finally {
+    client.release()
+  }
 })
 
 export default router
