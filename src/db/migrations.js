@@ -81,18 +81,16 @@ export async function runMigrations() {
     );
   `)
 
-  -- Add new columns if not exist
-  await pool.query(`
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS creator_id      INT REFERENCES users(id) DEFAULT NULL;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS price_per_exec  NUMERIC(18,8) NOT NULL DEFAULT 0.002;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ref_bonus       NUMERIC(18,8) NOT NULL DEFAULT 0.0005;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_fee     NUMERIC(18,8) NOT NULL DEFAULT 0.0005;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS max_executions  INT DEFAULT 100;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS executions      INT DEFAULT 0;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS budget          NUMERIC(18,8) DEFAULT 0;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_title   TEXT;
-    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_photo   TEXT;
-  `)
+  // Add new columns if not exist
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS creator_id     INT REFERENCES users(id) DEFAULT NULL`)
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS price_per_exec NUMERIC(18,8) DEFAULT 0.002`)
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ref_bonus      NUMERIC(18,8) DEFAULT 0.0005`)
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_fee    NUMERIC(18,8) DEFAULT 0.0005`)
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS max_executions INT DEFAULT 100`)
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS executions     INT DEFAULT 0`)
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS budget         NUMERIC(18,8) DEFAULT 0`)
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_title  TEXT`)
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_photo  TEXT`)
 
   // Default settings
   await pool.query(`
