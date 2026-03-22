@@ -29,7 +29,7 @@ export async function runMigrations() {
     CREATE TABLE IF NOT EXISTS stakes (
       id          SERIAL PRIMARY KEY,
       user_id     INT REFERENCES users(id),
-      pool_id     INT REFERENCES staking_pools(id),
+      pool_id     INT REFERENCES staking_pools(id) DEFAULT NULL,
       amount      NUMERIC(18, 8) NOT NULL,
       earned      NUMERIC(18, 8) DEFAULT 0,
       started_at  TIMESTAMPTZ DEFAULT NOW(),
@@ -75,28 +75,20 @@ export async function runMigrations() {
       bonus_paid    BOOLEAN DEFAULT false,
       created_at    TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `)
 
-  // Seed default pools
+  // Default settings
   await pool.query(`
-    INSERT INTO staking_pools (name, apy, min_amount, lock_days, risk)
-    VALUES
-      ('Flexible', 8,  1,   0,  'Низкий'),
-      ('Standard', 15, 10,  30, 'Средний'),
-      ('Premium',  28, 100, 90, 'Высокий')
-    ON CONFLICT DO NOTHING;
-  `)
-
-  // Seed default tasks
-  await pool.query(`
-    INSERT INTO tasks (type, title, reward, icon)
-    VALUES
-      ('subscribe', 'Подписаться на канал',   0.5, '📢'),
-      ('checkin',   'Ежедневный чекин',       0.1, '📅'),
-      ('referral',  'Пригласить 1 друга',     1.0, '👥'),
-      ('twitter',   'Подписаться на Twitter', 0.3, '🐦'),
-      ('stake',     'Сделать первый стейк',   0.5, '💰')
-    ON CONFLICT DO NOTHING;
+    INSERT INTO settings (key, value) VALUES
+      ('ref_register_bonus',  '0.5'),
+      ('ref_task_percent',    '10'),
+      ('ref_deposit_percent', '5')
+    ON CONFLICT (key) DO NOTHING;
   `)
 
   console.log('✅ Migrations done')
