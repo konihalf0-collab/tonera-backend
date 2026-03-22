@@ -27,22 +27,20 @@ export function setupBotHandlers(bot) {
     try {
       const refCode = crypto.randomBytes(4).toString('hex')
 
-      // Только регистрируем юзера — БЕЗ начисления реферального бонуса
-      // Бонус начисляется на фронте через /api/referrals/apply
+      // Регистрируем юзера и сохраняем pending_ref если есть реф код
       await pool.query(
-        `INSERT INTO users (telegram_id, username, first_name, last_name, ref_code)
-         VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO users (telegram_id, username, first_name, last_name, ref_code, pending_ref)
+         VALUES ($1,$2,$3,$4,$5,$6)
          ON CONFLICT (telegram_id) DO UPDATE SET
-           username=EXCLUDED.username, first_name=EXCLUDED.first_name
-         RETURNING *`,
-        [tgId, msg.from.username, msg.from.first_name, msg.from.last_name, refCode]
+           username   = EXCLUDED.username,
+           first_name = EXCLUDED.first_name,
+           pending_ref = CASE
+             WHEN users.referred_by IS NULL AND $6 IS NOT NULL AND $6 != users.ref_code
+             THEN $6
+             ELSE users.pending_ref
+           END`,
+        [tgId, msg.from.username, msg.from.first_name, msg.from.last_name, refCode, startParam || null]
       )
-
-      // Отправляем приветствие с кнопкой открыть приложение
-      // start_param передаётся в web_app url чтобы фронт применил реф код
-      const appUrl = startParam
-        ? `${APP_URL}?start=${startParam}`
-        : APP_URL
 
       await bot.sendMessage(tgId,
         `👋 Привет, ${msg.from.first_name}!\n\n💎 Добро пожаловать в *TonEra*\n\nЗарабатывай TON через стейкинг и задания!`,
@@ -50,7 +48,7 @@ export function setupBotHandlers(bot) {
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [[
-              { text: '🚀 Открыть приложение', web_app: { url: appUrl } }
+              { text: '🚀 Открыть приложение', web_app: { url: APP_URL } }
             ]]
           }
         }

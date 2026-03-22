@@ -14,9 +14,9 @@ export async function runMigrations() {
       referral_count  INT DEFAULT 0,
       ton_address     TEXT,
       is_blocked      BOOLEAN DEFAULT false,
+      pending_ref     TEXT,
       created_at      TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS stakes (
       id          SERIAL PRIMARY KEY,
       user_id     INT REFERENCES users(id),
@@ -28,7 +28,6 @@ export async function runMigrations() {
       status      TEXT DEFAULT 'active',
       created_at  TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS tasks (
       id              SERIAL PRIMARY KEY,
       creator_id      INT REFERENCES users(id) DEFAULT NULL,
@@ -49,7 +48,6 @@ export async function runMigrations() {
       active          BOOLEAN DEFAULT true,
       created_at      TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS user_tasks (
       id           SERIAL PRIMARY KEY,
       user_id      INT REFERENCES users(id),
@@ -57,7 +55,6 @@ export async function runMigrations() {
       completed_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(user_id, task_id)
     );
-
     CREATE TABLE IF NOT EXISTS transactions (
       id          SERIAL PRIMARY KEY,
       user_id     INT REFERENCES users(id),
@@ -67,7 +64,6 @@ export async function runMigrations() {
       status      TEXT DEFAULT 'completed',
       created_at  TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS referrals (
       id           SERIAL PRIMARY KEY,
       referrer_id  INT REFERENCES users(id),
@@ -75,14 +71,14 @@ export async function runMigrations() {
       bonus_paid   BOOLEAN DEFAULT false,
       created_at   TIMESTAMPTZ DEFAULT NOW()
     );
-
     CREATE TABLE IF NOT EXISTS settings (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
   `)
 
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT false`)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked  BOOLEAN DEFAULT false`)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_ref TEXT`)
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS creator_id     INT REFERENCES users(id) DEFAULT NULL`)
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS price_per_exec NUMERIC(18,8) DEFAULT 0.002`)
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ref_bonus      NUMERIC(18,8) DEFAULT 0.0005`)
