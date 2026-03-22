@@ -16,20 +16,10 @@ export async function runMigrations() {
       created_at    TIMESTAMPTZ DEFAULT NOW()
     );
 
-    CREATE TABLE IF NOT EXISTS staking_pools (
-      id          SERIAL PRIMARY KEY,
-      name        TEXT NOT NULL,
-      apy         NUMERIC(5, 2) NOT NULL,
-      min_amount  NUMERIC(18, 8) DEFAULT 1,
-      lock_days   INT DEFAULT 0,
-      risk        TEXT DEFAULT 'Низкий',
-      active      BOOLEAN DEFAULT true
-    );
-
     CREATE TABLE IF NOT EXISTS stakes (
       id          SERIAL PRIMARY KEY,
       user_id     INT REFERENCES users(id),
-      pool_id     INT REFERENCES staking_pools(id) DEFAULT NULL,
+      pool_id     INT DEFAULT NULL,
       amount      NUMERIC(18, 8) NOT NULL,
       earned      NUMERIC(18, 8) DEFAULT 0,
       started_at  TIMESTAMPTZ DEFAULT NOW(),
@@ -40,12 +30,14 @@ export async function runMigrations() {
 
     CREATE TABLE IF NOT EXISTS tasks (
       id          SERIAL PRIMARY KEY,
-      type        TEXT NOT NULL,
+      type        TEXT NOT NULL DEFAULT 'subscribe',
       title       TEXT NOT NULL,
       description TEXT,
-      reward      NUMERIC(18, 8) NOT NULL,
-      icon        TEXT DEFAULT '✅',
+      reward      NUMERIC(18, 8) NOT NULL DEFAULT 0.5,
+      icon        TEXT DEFAULT '✈️',
       link        TEXT,
+      channel_title TEXT,
+      channel_photo TEXT,
       active      BOOLEAN DEFAULT true,
       created_at  TIMESTAMPTZ DEFAULT NOW()
     );
@@ -82,12 +74,19 @@ export async function runMigrations() {
     );
   `)
 
+  // Add new columns if not exist
+  await pool.query(`
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_title TEXT;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS channel_photo TEXT;
+  `)
+
   // Default settings
   await pool.query(`
     INSERT INTO settings (key, value) VALUES
       ('ref_register_bonus',  '0.5'),
       ('ref_task_percent',    '10'),
-      ('ref_deposit_percent', '5')
+      ('ref_deposit_percent', '5'),
+      ('task_reward',         '0.5')
     ON CONFLICT (key) DO NOTHING;
   `)
 

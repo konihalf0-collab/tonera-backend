@@ -12,8 +12,8 @@
     "pg": "^8.11.3",
     "dotenv": "^16.4.1",
     "cors": "^2.8.5",
-    "crypto": "^1.0.1",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "node-telegram-bot-api": "^0.64.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"
