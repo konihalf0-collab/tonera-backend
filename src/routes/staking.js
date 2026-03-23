@@ -79,23 +79,7 @@ router.post('/stake', async (req, res) => {
       [user.id, -parseFloat(amount)]
     )
 
-    // Реферальный бонус за депозит
-    if (user.referred_by) {
-      const { rows: [setting] } = await client.query("SELECT value FROM settings WHERE key = 'ref_deposit_percent'")
-      const percent = parseFloat(setting?.value || 5) / 100
-      const refBonus = parseFloat(amount) * percent
-
-      if (refBonus > 0) {
-        const { rows: [referrer] } = await client.query('SELECT * FROM users WHERE telegram_id = $1', [user.referred_by])
-        if (referrer) {
-          await client.query('UPDATE users SET balance_ton = balance_ton + $1 WHERE id = $2', [refBonus, referrer.id])
-          await client.query(
-            `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'ref_deposit', $2, $3)`,
-            [referrer.id, refBonus, `Реф. бонус за депозит (${user.username || user.first_name})`]
-          )
-        }
-      }
-    }
+    // Реф. бонус за депозит начисляется только при пополнении через TON Connect
 
     await client.query('COMMIT')
     res.json({ stake: { ...stake, earned: 0, daily_reward: parseFloat(amount) * DAILY_RATE } })
@@ -114,6 +98,7 @@ router.post('/unstake/:stakeId', async (req, res) => {
     const tgId = req.telegramUser.id
     const { stakeId } = req.params
     const label = req.body?.label || 'Вывод стейка + доход'
+    const internal = req.body?.internal || false // внутренняя операция — не начислять баланс
 
     await client.query('BEGIN')
 
@@ -127,13 +112,16 @@ router.post('/unstake/:stakeId', async (req, res) => {
     const earned = calcEarned(stake.amount, stake.started_at)
     const returnAmount = parseFloat(stake.amount) + earned
 
-    await client.query('UPDATE users SET balance_ton = balance_ton + $1 WHERE id = $2', [returnAmount, stake.uid])
-    await client.query(`UPDATE stakes SET status = 'completed', earned = $1 WHERE id = $2`, [earned, stakeId])
-    await client.query(
-      `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'reward', $2, $3)`,
-      [stake.uid, returnAmount, label]
-    )
+    if (!internal) {
+      // Реальный вывод — начисляем баланс и пишем в историю
+      await client.query('UPDATE users SET balance_ton = balance_ton + $1 WHERE id = $2', [returnAmount, stake.uid])
+      await client.query(
+        `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'reward', $2, $3)`,
+        [stake.uid, returnAmount, label]
+      )
+    }
 
+    await client.query(`UPDATE stakes SET status = 'completed', earned = $1 WHERE id = $2`, [earned, stakeId])
     await client.query('COMMIT')
     res.json({ success: true, returned: returnAmount, principal: parseFloat(stake.amount), earned })
   } catch (e) {
