@@ -133,6 +133,46 @@ router.post('/unstake/:stakeId', async (req, res) => {
   }
 })
 
+// POST /api/staking/collect/:stakeId — собрать доход
+router.post('/collect/:stakeId', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const tgId = req.telegramUser.id
+    const { stakeId } = req.params
+
+    await client.query('BEGIN')
+
+    const { rows: [stake] } = await client.query(
+      `SELECT s.*, u.id as uid FROM stakes s JOIN users u ON s.user_id = u.id
+       WHERE s.id=$1 AND u.telegram_id=$2 AND s.status='active'`,
+      [stakeId, tgId]
+    )
+    if (!stake) return res.status(404).json({ error: 'Stake not found' })
+
+    const earned = parseFloat(stake.earned || 0) + parseFloat(stake.amount) * 0.01 / (24*60*60*1000) * (Date.now() - new Date(stake.started_at).getTime())
+
+    // Начисляем доход на баланс
+    await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [earned, stake.uid])
+
+    // Сбрасываем earned и started_at, сумма депозита не меняется
+    await client.query('UPDATE stakes SET earned=0, started_at=NOW() WHERE id=$1', [stakeId])
+
+    await client.query(
+      `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,'Сбор дохода')`,
+      [stake.uid, earned]
+    )
+
+    await client.query('COMMIT')
+    res.json({ ok: true, earned })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    console.error(e)
+    res.status(500).json({ error: 'Server error' })
+  } finally {
+    client.release()
+  }
+})
+
 // POST /api/staking/add — добавить к существующему стейку
 router.post('/add', async (req, res) => {
   const client = await pool.connect()
