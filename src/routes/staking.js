@@ -130,8 +130,8 @@ router.post('/unstake/:stakeId', async (req, res) => {
     await client.query('UPDATE users SET balance_ton = balance_ton + $1 WHERE id = $2', [returnAmount, stake.uid])
     await client.query(`UPDATE stakes SET status = 'completed', earned = $1 WHERE id = $2`, [earned, stakeId])
     await client.query(
-      `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'reward', $2, label)`,
-      [stake.uid, returnAmount]
+      `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'reward', $2, $3)`,
+      [stake.uid, returnAmount, label]
     )
 
     await client.query('COMMIT')
