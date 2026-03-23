@@ -145,4 +145,44 @@ router.post('/unstake/:stakeId', async (req, res) => {
   }
 })
 
+// POST /api/staking/reinvest/:stakeId
+router.post('/reinvest/:stakeId', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const tgId = req.telegramUser.id
+    const { stakeId } = req.params
+    const { earned, newAmount } = req.body
+
+    await client.query('BEGIN')
+
+    const { rows: [stake] } = await client.query(
+      `SELECT s.*, u.id as uid FROM stakes s JOIN users u ON s.user_id = u.id
+       WHERE s.id = $1 AND u.telegram_id = $2 AND s.status = 'active'`,
+      [stakeId, tgId]
+    )
+    if (!stake) return res.status(404).json({ error: 'Stake not found' })
+
+    // Просто обновляем сумму стейка и сбрасываем время — без лишних транзакций
+    await client.query(
+      `UPDATE stakes SET amount = $1, earned = 0, started_at = NOW() WHERE id = $2`,
+      [newAmount, stakeId]
+    )
+
+    // Одна запись в историю
+    await client.query(
+      `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'reinvest', $2, 'Реинвестиция')`,
+      [stake.uid, earned]
+    )
+
+    await client.query('COMMIT')
+    res.json({ ok: true })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    console.error(e)
+    res.status(500).json({ error: 'Server error' })
+  } finally {
+    client.release()
+  }
+})
+
 export default router
