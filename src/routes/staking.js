@@ -113,6 +113,7 @@ router.post('/unstake/:stakeId', async (req, res) => {
   try {
     const tgId = req.telegramUser.id
     const { stakeId } = req.params
+    const label = req.body?.label || 'Вывод стейка + доход'
 
     await client.query('BEGIN')
 
@@ -129,7 +130,7 @@ router.post('/unstake/:stakeId', async (req, res) => {
     await client.query('UPDATE users SET balance_ton = balance_ton + $1 WHERE id = $2', [returnAmount, stake.uid])
     await client.query(`UPDATE stakes SET status = 'completed', earned = $1 WHERE id = $2`, [earned, stakeId])
     await client.query(
-      `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'reward', $2, 'Вывод стейка + доход')`,
+      `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'reward', $2, label)`,
       [stake.uid, returnAmount]
     )
 
