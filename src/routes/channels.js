@@ -43,4 +43,31 @@ router.get('/info', async (req, res) => {
   }
 })
 
+// GET /api/channels/check?link=... — проверить что бот является админом канала
+router.get('/check', async (req, res) => {
+  try {
+    const { link } = req.query
+    if (!link) return res.status(400).json({ error: 'link required' })
+
+    const bot = getBot()
+    if (!bot) return res.status(500).json({ error: 'Bot not initialized' })
+
+    const match = link.match(/t\.me\/([^/?]+)/)
+    if (!match) return res.status(400).json({ error: 'Invalid telegram link' })
+
+    const username = '@' + match[1]
+
+    try {
+      const botInfo = await bot.getMe()
+      const member = await bot.getChatMember(username, botInfo.id)
+      const isAdmin = ['administrator', 'creator'].includes(member.status)
+      res.json({ ok: isAdmin, status: member.status, bot: botInfo.username })
+    } catch (e) {
+      res.json({ ok: false, status: 'not_member', error: e.message })
+    }
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 export default router
