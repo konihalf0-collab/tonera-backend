@@ -133,6 +133,60 @@ router.post('/unstake/:stakeId', async (req, res) => {
   }
 })
 
+// POST /api/staking/withdraw — частичный вывод из стейка
+router.post('/withdraw', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const tgId = req.telegramUser.id
+    const { amount, stakeId } = req.body
+    if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ error: 'Invalid amount' })
+
+    await client.query('BEGIN')
+
+    const { rows: [stake] } = await client.query(
+      `SELECT s.*, u.id as uid FROM stakes s JOIN users u ON s.user_id=u.id
+       WHERE s.id=$1 AND u.telegram_id=$2 AND s.status='active'`,
+      [stakeId, tgId]
+    )
+    if (!stake) return res.status(404).json({ error: 'Stake not found' })
+
+    const withdrawAmt = parseFloat(amount)
+    if (withdrawAmt > parseFloat(stake.amount)) return res.status(400).json({ error: 'Amount exceeds stake' })
+
+    // Сохраняем накопленный доход перед изменением
+    const currentEarned = parseFloat(stake.earned || 0) + parseFloat(stake.amount) * 0.01 / (24*60*60*1000) * (Date.now() - new Date(stake.started_at).getTime())
+    const newAmount = parseFloat(stake.amount) - withdrawAmt
+
+    // Начисляем выводимую сумму на баланс
+    await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [withdrawAmt, stake.uid])
+
+    if (newAmount > 0) {
+      // Уменьшаем стейк
+      await client.query(
+        'UPDATE stakes SET amount=$1, earned=$2, started_at=NOW() WHERE id=$3',
+        [newAmount, currentEarned, stakeId]
+      )
+    } else {
+      // Закрываем стейк
+      await client.query("UPDATE stakes SET status='completed', earned=$1 WHERE id=$2", [currentEarned, stakeId])
+    }
+
+    await client.query(
+      `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,'Вывод из стейка')`,
+      [stake.uid, withdrawAmt]
+    )
+
+    await client.query('COMMIT')
+    res.json({ ok: true })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    console.error(e)
+    res.status(500).json({ error: 'Server error' })
+  } finally {
+    client.release()
+  }
+})
+
 // POST /api/staking/collect/:stakeId — собрать доход
 router.post('/collect/:stakeId', async (req, res) => {
   const client = await pool.connect()
