@@ -153,9 +153,12 @@ router.post('/add', async (req, res) => {
     let stake
     if (stakeId) {
       // Обновляем существующий стейк — увеличиваем сумму
+      // Сохраняем накопленный доход и обновляем сумму + время
+      const { rows: [existing] } = await client.query('SELECT * FROM stakes WHERE id=$1', [stakeId])
+      const currentEarned = existing ? parseFloat(existing.earned || 0) + (parseFloat(existing.amount) * 0.01 / (24*60*60*1000) * (Date.now() - new Date(existing.started_at).getTime())) : 0
       const { rows: [s] } = await client.query(
-        `UPDATE stakes SET amount=amount+$1, started_at=NOW() WHERE id=$2 AND user_id=$3 AND status='active' RETURNING *`,
-        [amount, stakeId, user.id]
+        `UPDATE stakes SET amount=amount+$1, earned=$2, started_at=NOW() WHERE id=$3 AND user_id=$4 AND status='active' RETURNING *`,
+        [amount, currentEarned, stakeId, user.id]
       )
       stake = s
     }
