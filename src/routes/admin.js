@@ -34,7 +34,7 @@ router.get('/stats', adminOnly, async (req, res) => {
         (SELECT COUNT(*) FROM users) as total_users,
         (SELECT COUNT(*) FROM users WHERE is_blocked=true) as blocked_users,
         (SELECT COUNT(*) FROM stakes WHERE status='active') as active_stakes,
-        (SELECT COALESCE(SUM(s.amount),0) FROM stakes s JOIN users u ON s.user_id=u.id WHERE s.status='active' AND s.amount > u.bonus_balance) as total_staked,
+        (SELECT COALESCE(SUM(amount),0) FROM stakes WHERE status='active') - (SELECT COALESCE(SUM(bonus_balance),0) FROM users) as total_staked,
         (SELECT COUNT(*) FROM referrals) as total_referrals,
         (SELECT COUNT(*) FROM user_tasks) as tasks_completed
     `)
