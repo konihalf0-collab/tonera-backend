@@ -13,13 +13,17 @@ function calcEarned(amount, startedAt) {
 router.get('/info', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT key, value FROM settings WHERE key IN ('min_deposit','min_withdraw','min_reinvest')"
+      "SELECT key, value FROM settings WHERE key IN ('min_deposit','min_withdraw','min_reinvest','task_price','task_reward','task_ref_bonus','task_project_fee')"
     )
     const mins = {}
-    rows.forEach(r => mins[r.key.replace('min_', '')] = parseFloat(r.value))
-    res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins })
+    const prices = {}
+    rows.forEach(r => {
+      if (r.key.startsWith('min_')) mins[r.key.replace('min_', '')] = parseFloat(r.value)
+      else prices[r.key] = parseFloat(r.value)
+    })
+    res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins, prices })
   } catch {
-    res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins: { deposit: 0.01, withdraw: 0.01, reinvest: 0.001 } })
+    res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins: { deposit: 0.01, withdraw: 0.01, reinvest: 0.001 }, prices: {} })
   }
 })
 
