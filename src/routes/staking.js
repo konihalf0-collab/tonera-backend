@@ -133,6 +133,58 @@ router.post('/unstake/:stakeId', async (req, res) => {
   }
 })
 
+// POST /api/staking/add — добавить к существующему стейку
+router.post('/add', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const tgId = req.telegramUser.id
+    const { amount, stakeId } = req.body
+    if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ error: 'Invalid amount' })
+
+    await client.query('BEGIN')
+
+    const { rows: [user] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [tgId])
+    if (!user) return res.status(404).json({ error: 'User not found' })
+    if (parseFloat(user.balance_ton) < parseFloat(amount)) return res.status(400).json({ error: 'Insufficient balance' })
+
+    // Списываем только добавляемую сумму
+    await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [amount, user.id])
+
+    let stake
+    if (stakeId) {
+      // Обновляем существующий стейк — увеличиваем сумму
+      const { rows: [s] } = await client.query(
+        `UPDATE stakes SET amount=amount+$1, started_at=NOW() WHERE id=$2 AND user_id=$3 AND status='active' RETURNING *`,
+        [amount, stakeId, user.id]
+      )
+      stake = s
+    }
+
+    if (!stake) {
+      // Создаём новый
+      const { rows: [s] } = await client.query(
+        `INSERT INTO stakes (user_id,amount,started_at,status) VALUES ($1,$2,NOW(),'active') RETURNING *`,
+        [user.id, amount]
+      )
+      stake = s
+    }
+
+    await client.query(
+      `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'stake',$2,'Пополнение стейка')`,
+      [user.id, -parseFloat(amount)]
+    )
+
+    await client.query('COMMIT')
+    res.json({ stake })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    console.error(e)
+    res.status(500).json({ error: 'Server error' })
+  } finally {
+    client.release()
+  }
+})
+
 // POST /api/staking/reinvest/:stakeId
 router.post('/reinvest/:stakeId', async (req, res) => {
   const client = await pool.connect()
