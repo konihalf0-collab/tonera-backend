@@ -100,7 +100,10 @@ export async function runMigrations() {
       ('task_reward',         '0.001'),
       ('task_price',          '0.002'),
       ('task_ref_bonus',      '0.0005'),
-      ('task_project_fee',    '0.0005')
+      ('task_project_fee',    '0.0005'),
+      ('min_deposit',          '0.01'),
+      ('min_withdraw',         '0.01'),
+      ('min_reinvest',         '0.001')
     ON CONFLICT (key) DO NOTHING;
   `)
 

@@ -11,7 +11,16 @@ function calcEarned(amount, startedAt) {
 }
 
 router.get('/info', async (req, res) => {
-  res.json({ daily_rate: DAILY_RATE, daily_percent: 1 })
+  try {
+    const { rows } = await pool.query(
+      "SELECT key, value FROM settings WHERE key IN ('min_deposit','min_withdraw','min_reinvest')"
+    )
+    const mins = {}
+    rows.forEach(r => mins[r.key.replace('min_', '')] = parseFloat(r.value))
+    res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins })
+  } catch {
+    res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins: { deposit: 0.01, withdraw: 0.01, reinvest: 0.001 } })
+  }
 })
 
 router.get('/my', async (req, res) => {
@@ -40,6 +49,13 @@ router.post('/stake', async (req, res) => {
     const tgId = req.telegramUser.id
     const { amount } = req.body
     if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ error: 'Invalid amount' })
+
+    // Проверяем минимальный депозит
+    const { rows: [minDep] } = await client.query("SELECT value FROM settings WHERE key='min_deposit'")
+    const minDepositVal = parseFloat(minDep?.value || 0.01)
+    if (parseFloat(amount) < minDepositVal) {
+      return res.status(400).json({ error: `Минимальный депозит: ${minDepositVal} TON` })
+    }
 
     await client.query('BEGIN')
 
