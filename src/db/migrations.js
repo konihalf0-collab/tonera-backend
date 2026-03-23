@@ -79,6 +79,9 @@ export async function runMigrations() {
 
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked  BOOLEAN DEFAULT false`)
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_ref TEXT`)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bonus_balance NUMERIC(18,8) DEFAULT 0`)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS welcome_bonus_claimed BOOLEAN DEFAULT false`)
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_ref TEXT`)
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS creator_id     INT REFERENCES users(id) DEFAULT NULL`)
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS price_per_exec NUMERIC(18,8) DEFAULT 0.002`)
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ref_bonus      NUMERIC(18,8) DEFAULT 0.0005`)

@@ -14,6 +14,7 @@ import referralRoutes from './routes/referrals.js'
 import walletRoutes   from './routes/wallet.js'
 import adminRoutes    from './routes/admin.js'
 import channelsRoutes from './routes/channels.js'
+import bonusRoutes    from './routes/bonus.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -50,6 +51,7 @@ app.use('/api/wallet',    walletRoutes)
 app.use('/api/user',      walletRoutes)
 app.use('/api/admin',     adminRoutes)
 app.use('/api/channels',  channelsRoutes)
+app.use('/api/bonus',     bonusRoutes)
 
 async function bootstrap() {
   await runMigrations()
