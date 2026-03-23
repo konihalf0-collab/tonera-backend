@@ -37,7 +37,7 @@ router.get('/my', async (req, res) => {
     )
     const result = rows.map(s => ({
       ...s,
-      earned: calcEarned(s.amount, s.started_at),
+      earned: parseFloat(s.earned || 0), // только сохранённое в БД, фронт сам считает тикер
       daily_reward: parseFloat(s.amount) * DAILY_RATE,
     }))
     res.json(result)
