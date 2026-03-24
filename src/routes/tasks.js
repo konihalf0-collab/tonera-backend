@@ -210,9 +210,9 @@ router.post('/:id/complete', async (req, res) => {
     await client.query('COMMIT')
     res.json({ success: true, reward })
   } catch (e) {
-    await client.query('ROLLBACK')
-    console.error(e)
-    res.status(500).json({ error: 'Server error' })
+    try { await client.query('ROLLBACK') } catch {}
+    console.error('TASK COMPLETE ERROR:', e.message, e.stack)
+    res.status(500).json({ error: e.message || 'Server error' })
   } finally {
     client.release()
   }
