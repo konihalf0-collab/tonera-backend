@@ -137,7 +137,26 @@ router.get('/withdrawals', adminOnly, async (req, res) => {
 // POST /api/admin/withdrawals/:id/complete
 router.post('/withdrawals/:id/complete', adminOnly, async (req, res) => {
   try {
-    await pool.query("UPDATE transactions SET status='completed' WHERE id=$1", [req.params.id])
+    const { rows: [tx] } = await pool.query(
+      "UPDATE transactions SET status='completed' WHERE id=$1 RETURNING *",
+      [req.params.id]
+    )
+    if (tx) {
+      // Уведомляем юзера
+      const { rows: [user] } = await pool.query('SELECT * FROM users WHERE id=$1', [tx.user_id])
+      if (user) {
+        try {
+          const { getBot } = await import('../bot.js')
+          const bot = getBot()
+          if (bot) {
+            await bot.sendMessage(user.telegram_id,
+              `✅ *Вывод выполнен*\n\nСумма: *${Math.abs(parseFloat(tx.amount)).toFixed(4)} TON* отправлена на ваш кошелёк.`,
+              { parse_mode: 'Markdown' }
+            )
+          }
+        } catch (e) { console.error('Notify error:', e.message) }
+      }
+    }
     res.json({ ok: true })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
