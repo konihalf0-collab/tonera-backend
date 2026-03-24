@@ -13,15 +13,17 @@ function calcEarned(amount, startedAt) {
 router.get('/info', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT key, value FROM settings WHERE key IN ('min_deposit','min_withdraw','min_reinvest','min_collect','task_price','task_reward','task_ref_bonus','task_project_fee')"
+      "SELECT key, value FROM settings WHERE key IN ('min_deposit','min_withdraw','min_reinvest','min_collect','staking_withdraw_fee','task_price','task_reward','task_ref_bonus','task_project_fee')"
     )
     const mins = {}
     const prices = {}
+    let stakingWithdrawFee = 0
     rows.forEach(r => {
       if (r.key.startsWith('min_')) mins[r.key.replace('min_', '')] = parseFloat(r.value)
+      else if (r.key === 'staking_withdraw_fee') stakingWithdrawFee = parseFloat(r.value)
       else prices[r.key] = parseFloat(r.value)
     })
-    res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins, prices })
+    res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins, prices, staking_withdraw_fee: stakingWithdrawFee })
   } catch {
     res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins: { deposit: 0.01, withdraw: 0.01, reinvest: 0.001 }, prices: {} })
   }
@@ -157,8 +159,22 @@ router.post('/withdraw', async (req, res) => {
     const currentEarned = parseFloat(stake.earned || 0) + parseFloat(stake.amount) * 0.01 / (24*60*60*1000) * (Date.now() - new Date(stake.started_at).getTime())
     const newAmount = parseFloat(stake.amount) - withdrawAmt
 
-    // Начисляем выводимую сумму на баланс
-    await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [withdrawAmt, stake.uid])
+    // Получаем комиссию за вывод из стейка
+    const { rows: [stFee] } = await client.query("SELECT value FROM settings WHERE key='staking_withdraw_fee'")
+    const feePercent = parseFloat(stFee?.value || 0) / 100
+    const fee = withdrawAmt * feePercent
+    const netWithdraw = withdrawAmt - fee
+
+    // Начисляем выводимую сумму за вычетом комиссии
+    await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [netWithdraw, stake.uid])
+
+    // Комиссия на аккаунт админа
+    if (fee > 0) {
+      const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=5651190404')
+      if (admin) {
+        await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [fee, admin.id])
+      }
+    }
 
     if (newAmount > 0) {
       // Уменьшаем стейк
@@ -173,7 +189,7 @@ router.post('/withdraw', async (req, res) => {
 
     await client.query(
       `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,'Вывод из стейка')`,
-      [stake.uid, withdrawAmt]
+      [stake.uid, netWithdraw]
     )
 
     await client.query('COMMIT')
