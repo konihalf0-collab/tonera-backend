@@ -9,13 +9,14 @@ const router = Router()
 router.get('/info', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT key, value FROM settings WHERE key IN ('project_wallet','min_deposit_ton','withdraw_fee')"
+      "SELECT key, value FROM settings WHERE key IN ('project_wallet','min_deposit_ton','withdraw_fee','min_withdraw_ton')"
     )
     const data = {}
     rows.forEach(r => {
       if (r.key === 'project_wallet') data.wallet = r.value || process.env.PROJECT_WALLET || ''
       if (r.key === 'min_deposit_ton') data.min_amount = parseFloat(r.value || 0.5)
       if (r.key === 'withdraw_fee') data.withdraw_fee = parseFloat(r.value || 0)
+      if (r.key === 'min_withdraw_ton') data.min_withdraw = parseFloat(r.value || 1)
     })
     // Fallback to env
     if (!data.wallet) data.wallet = process.env.PROJECT_WALLET || ''
@@ -116,6 +117,13 @@ router.post('/withdraw', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' })
 
     const withdrawAmount = parseFloat(amount)
+
+    // Проверяем минимальный вывод
+    const { rows: [minW] } = await client.query("SELECT value FROM settings WHERE key='min_withdraw_ton'")
+    const minWithdraw = parseFloat(minW?.value || 1)
+    if (withdrawAmount < minWithdraw) {
+      return res.status(400).json({ error: `Минимальный вывод: ${minWithdraw} TON` })
+    }
 
     // Получаем комиссию
     const { rows: [feeSetting] } = await client.query("SELECT value FROM settings WHERE key='withdraw_fee'")

@@ -104,6 +104,7 @@ export async function runMigrations() {
       ('project_wallet',      ''),
       ('min_deposit_ton',     '0.5'),
       ('withdraw_fee',        '0'),
+      ('min_withdraw_ton',   '1'),
       ('min_deposit',          '0.01'),
       ('min_withdraw',         '0.01'),
       ('min_reinvest',         '0.001')
