@@ -149,10 +149,14 @@ router.post('/withdrawals/:id/complete', adminOnly, async (req, res) => {
           const { getBot } = await import('../bot.js')
           const bot = getBot()
           if (bot) {
-            await bot.sendMessage(user.telegram_id,
-              `✅ *Вывод выполнен*\n\nСумма: *${Math.abs(parseFloat(tx.amount)).toFixed(4)} TON* отправлена на ваш кошелёк.`,
-              { parse_mode: 'Markdown' }
-            )
+            const labelParts = (tx.label || '').split('|net:')
+            const netAmt = labelParts[1] ? parseFloat(labelParts[1]).toFixed(4) : Math.abs(parseFloat(tx.amount)).toFixed(4)
+            const totalAmt = Math.abs(parseFloat(tx.amount)).toFixed(4)
+            const feeAmt = (Math.abs(parseFloat(tx.amount)) - parseFloat(netAmt)).toFixed(4)
+            const msg = parseFloat(feeAmt) > 0
+              ? `✅ *Вывод выполнен*\n\nЗапрошено: *${totalAmt} TON*\nКомиссия: *${feeAmt} TON*\nПолучите: *${netAmt} TON*`
+              : `✅ *Вывод выполнен*\n\nСумма: *${netAmt} TON* отправлена на ваш кошелёк.`
+            await bot.sendMessage(user.telegram_id, msg, { parse_mode: 'Markdown' })
           }
         } catch (e) { console.error('Notify error:', e.message) }
       }

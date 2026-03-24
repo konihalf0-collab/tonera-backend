@@ -152,9 +152,10 @@ router.post('/withdraw', async (req, res) => {
     // Сохраняем адрес кошелька
     await client.query('UPDATE users SET ton_address=$1 WHERE id=$2', [wallet_address, user.id])
 
+    const netAmount = withdrawAmount  // сумма к выплате
     await client.query(
       `INSERT INTO transactions (user_id,type,amount,label,status) VALUES ($1,'withdraw',$2,$3,'pending')`,
-      [user.id, -withdrawAmount, `Вывод на ${wallet_address}`]
+      [user.id, -totalDeduct, `Вывод на ${wallet_address}|net:${netAmount}`]
     )
 
     await client.query('COMMIT')
