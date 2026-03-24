@@ -164,3 +164,34 @@ router.post('/withdrawals/:id/complete', adminOnly, async (req, res) => {
     res.json({ ok: true })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
+
+// GET /api/admin/users/:id/stats — детальная статистика юзера
+router.get('/users/:id/stats', adminOnly, async (req, res) => {
+  try {
+    const { rows: [user] } = await pool.query(
+      'SELECT * FROM users WHERE id=$1', [req.params.id]
+    )
+    if (!user) return res.status(404).json({ error: 'Not found' })
+
+    const { rows: txs } = await pool.query(
+      'SELECT * FROM transactions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50',
+      [req.params.id]
+    )
+    const { rows: stakes } = await pool.query(
+      'SELECT * FROM stakes WHERE user_id=$1 ORDER BY created_at DESC',
+      [req.params.id]
+    )
+    const { rows: tasks } = await pool.query(
+      `SELECT t.title, ut.completed_at FROM user_tasks ut
+       JOIN tasks t ON ut.task_id=t.id
+       WHERE ut.user_id=$1 ORDER BY ut.completed_at DESC`,
+      [req.params.id]
+    )
+
+    const totalDeposit = txs.filter(t => t.type === 'deposit').reduce((s, t) => s + parseFloat(t.amount), 0)
+    const totalWithdraw = txs.filter(t => t.type === 'withdraw').reduce((s, t) => s + Math.abs(parseFloat(t.amount)), 0)
+    const totalStaked = stakes.filter(s => s.status === 'active').reduce((s, t) => s + parseFloat(t.amount), 0)
+
+    res.json({ user, txs, stakes, tasks, stats: { totalDeposit, totalWithdraw, totalStaked, tasksCount: tasks.length } })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
