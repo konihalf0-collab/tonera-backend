@@ -9,12 +9,13 @@ const router = Router()
 router.get('/info', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT key, value FROM settings WHERE key IN ('project_wallet','min_deposit_ton')"
+      "SELECT key, value FROM settings WHERE key IN ('project_wallet','min_deposit_ton','withdraw_fee')"
     )
     const data = {}
     rows.forEach(r => {
       if (r.key === 'project_wallet') data.wallet = r.value || process.env.PROJECT_WALLET || ''
       if (r.key === 'min_deposit_ton') data.min_amount = parseFloat(r.value || 0.5)
+      if (r.key === 'withdraw_fee') data.withdraw_fee = parseFloat(r.value || 0)
     })
     // Fallback to env
     if (!data.wallet) data.wallet = process.env.PROJECT_WALLET || ''
@@ -115,12 +116,31 @@ router.post('/withdraw', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' })
 
     const withdrawAmount = parseFloat(amount)
-    if (parseFloat(user.balance_ton) < withdrawAmount) {
-      return res.status(400).json({ error: 'Insufficient balance' })
+
+    // Получаем комиссию
+    const { rows: [feeSetting] } = await client.query("SELECT value FROM settings WHERE key='withdraw_fee'")
+    const feePercent = parseFloat(feeSetting?.value || 0) / 100
+    const fee = withdrawAmount * feePercent
+    const totalDeduct = withdrawAmount + fee
+
+    if (parseFloat(user.balance_ton) < totalDeduct) {
+      return res.status(400).json({ error: `Недостаточно средств. Нужно ${totalDeduct.toFixed(4)} TON (включая комиссию ${fee.toFixed(4)} TON)` })
     }
 
-    // Списываем баланс
-    await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [withdrawAmount, user.id])
+    // Списываем баланс + комиссию
+    await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [totalDeduct, user.id])
+
+    // Комиссия на аккаунт админа
+    if (fee > 0) {
+      const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [5651190404])
+      if (admin) {
+        await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [fee, admin.id])
+        await client.query(
+          "INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'fee',$2,'Комиссия за вывод')",
+          [admin.id, fee]
+        )
+      }
+    }
 
     // Сохраняем адрес кошелька
     await client.query('UPDATE users SET ton_address=$1 WHERE id=$2', [wallet_address, user.id])
