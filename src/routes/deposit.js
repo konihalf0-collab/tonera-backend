@@ -119,8 +119,7 @@ router.post('/withdraw', async (req, res) => {
 
     // Получаем комиссию
     const { rows: [feeSetting] } = await client.query("SELECT value FROM settings WHERE key='withdraw_fee'")
-    const feePercent = parseFloat(feeSetting?.value || 0) / 100
-    const fee = withdrawAmount * feePercent
+    const fee = parseFloat(feeSetting?.value || 0)
     const totalDeduct = withdrawAmount + fee
 
     if (parseFloat(user.balance_ton) < totalDeduct) {
