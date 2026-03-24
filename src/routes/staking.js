@@ -164,6 +164,7 @@ router.post('/withdraw', async (req, res) => {
     const feePercent = parseFloat(stFee?.value || 0) / 100
     const fee = withdrawAmt * feePercent
     const netWithdraw = withdrawAmt - fee
+    console.log(`WITHDRAW: amount=${withdrawAmt} fee%=${feePercent} fee=${fee} net=${netWithdraw}`)
 
     // Начисляем выводимую сумму за вычетом комиссии
     await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [netWithdraw, stake.uid])
@@ -188,8 +189,8 @@ router.post('/withdraw', async (req, res) => {
     }
 
     await client.query(
-      `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,'Вывод из стейка')`,
-      [stake.uid, netWithdraw]
+      `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,$3)`,
+      [stake.uid, netWithdraw, fee > 0 ? `Вывод из стейка (комиссия ${(feePercent*100).toFixed(0)}%)` : 'Вывод из стейка']
     )
 
     await client.query('COMMIT')
