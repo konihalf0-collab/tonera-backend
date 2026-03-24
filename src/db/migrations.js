@@ -101,7 +101,7 @@ export async function runMigrations() {
       ('task_price',          '0.002'),
       ('task_ref_bonus',      '0.0005'),
       ('task_project_fee',    '0.0005'),
-      ('project_wallet',      ''),
+      ('project_wallet',      process.env.PROJECT_WALLET || ''),
       ('min_deposit_ton',     '0.5'),
       ('min_deposit',          '0.01'),
       ('min_withdraw',         '0.01'),
