@@ -75,6 +75,20 @@ router.post('/confirm', async (req, res) => {
     )
 
     await client.query('COMMIT')
+
+    // Уведомление админу о пополнении
+    try {
+      const bot = getBot()
+      if (bot) {
+        await bot.sendMessage(ADMIN_TG_ID,
+          `⬇️ *Пополнение баланса*\n\n` +
+          `👤 ${user.username ? '@' + user.username : user.first_name}\n` +
+          `💰 Сумма: *${depositAmount} TON*`,
+          { parse_mode: 'Markdown' }
+        )
+      }
+    } catch (e) { console.error('Notify error:', e.message) }
+
     res.json({ ok: true, amount: depositAmount })
   } catch (e) {
     await client.query('ROLLBACK')
