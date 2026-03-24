@@ -105,9 +105,11 @@ export async function runMigrations() {
       ('min_deposit_ton',     '0.5'),
       ('withdraw_fee',        '0'),
       ('min_withdraw_ton',   '1'),
+      ('min_collect',         '0.001'),
       ('min_deposit',          '0.01'),
       ('min_withdraw',         '0.01'),
-      ('min_reinvest',         '0.001')
+      ('min_reinvest',         '0.001'),
+      ('min_collect',          '0.001')
     ON CONFLICT (key) DO NOTHING;
   `)
 

@@ -13,7 +13,7 @@ function calcEarned(amount, startedAt) {
 router.get('/info', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT key, value FROM settings WHERE key IN ('min_deposit','min_withdraw','min_reinvest','task_price','task_reward','task_ref_bonus','task_project_fee')"
+      "SELECT key, value FROM settings WHERE key IN ('min_deposit','min_withdraw','min_reinvest','min_collect','task_price','task_reward','task_ref_bonus','task_project_fee')"
     )
     const mins = {}
     const prices = {}
