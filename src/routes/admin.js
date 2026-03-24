@@ -119,3 +119,24 @@ router.delete('/users/:id', adminOnly, async (req, res) => {
 })
 
 export default router
+
+// GET /api/admin/withdrawals
+router.get('/withdrawals', adminOnly, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.*, u.username, u.first_name FROM transactions t
+       JOIN users u ON t.user_id = u.id
+       WHERE t.type = 'withdraw'
+       ORDER BY t.created_at DESC LIMIT 100`
+    )
+    res.json(rows)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/admin/withdrawals/:id/complete
+router.post('/withdrawals/:id/complete', adminOnly, async (req, res) => {
+  try {
+    await pool.query("UPDATE transactions SET status='completed' WHERE id=$1", [req.params.id])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
