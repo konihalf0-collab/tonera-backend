@@ -9,7 +9,7 @@ const router = Router()
 router.get('/info', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT value FROM settings WHERE key IN ('project_wallet','min_deposit_ton')"
+      "SELECT key, value FROM settings WHERE key IN ('project_wallet','min_deposit_ton')"
     )
     const data = {}
     rows.forEach(r => {
