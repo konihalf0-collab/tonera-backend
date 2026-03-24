@@ -125,16 +125,21 @@ router.post('/withdraw', async (req, res) => {
       return res.status(400).json({ error: `Минимальный вывод: ${minWithdraw} TON` })
     }
 
-    // Получаем комиссию
+    // Получаем комиссию — вычитается из суммы вывода
     const { rows: [feeSetting] } = await client.query("SELECT value FROM settings WHERE key='withdraw_fee'")
     const fee = parseFloat(feeSetting?.value || 0)
-    const totalDeduct = withdrawAmount + fee
+    const netAmount = withdrawAmount - fee  // сумма к выплате после вычета комиссии
+    const totalDeduct = withdrawAmount      // с баланса списываем только запрошенную сумму
 
-    if (parseFloat(user.balance_ton) < totalDeduct) {
-      return res.status(400).json({ error: `Недостаточно средств. Нужно ${totalDeduct.toFixed(4)} TON (включая комиссию ${fee.toFixed(4)} TON)` })
+    if (netAmount <= 0) {
+      return res.status(400).json({ error: `Сумма меньше комиссии (${fee} TON)` })
     }
 
-    // Списываем баланс + комиссию
+    if (parseFloat(user.balance_ton) < totalDeduct) {
+      return res.status(400).json({ error: `Недостаточно средств` })
+    }
+
+    // Списываем с баланса
     await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [totalDeduct, user.id])
 
     // Комиссия на аккаунт админа
@@ -152,7 +157,6 @@ router.post('/withdraw', async (req, res) => {
     // Сохраняем адрес кошелька
     await client.query('UPDATE users SET ton_address=$1 WHERE id=$2', [wallet_address, user.id])
 
-    const netAmount = withdrawAmount  // сумма к выплате
     await client.query(
       `INSERT INTO transactions (user_id,type,amount,label,status) VALUES ($1,'withdraw',$2,$3,'pending')`,
       [user.id, -totalDeduct, `Вывод на ${wallet_address}|net:${netAmount}`]
