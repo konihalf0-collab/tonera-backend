@@ -42,6 +42,7 @@ app.get('/admin/reset-tasks', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
+app.use('/api/channels',  channelsRoutes)
 app.use('/api', telegramAuth)
 app.use('/api/auth',      authRoutes)
 app.use('/api/staking',   stakingRoutes)
@@ -50,7 +51,6 @@ app.use('/api/referrals', referralRoutes)
 app.use('/api/wallet',    walletRoutes)
 app.use('/api/user',      walletRoutes)
 app.use('/api/admin',     adminRoutes)
-app.use('/api/channels',  channelsRoutes)
 app.use('/api/bonus',     bonusRoutes)
 
 async function bootstrap() {
