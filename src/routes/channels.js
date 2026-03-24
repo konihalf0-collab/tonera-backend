@@ -21,21 +21,24 @@ router.get('/info', async (req, res) => {
 
     try {
       const chat = await bot.getChat('@' + username)
+      const title = chat.title || chat.first_name || username
+      const photo = `https://t.me/i/userpic/320/${username}.jpg`
       res.json({
         id: chat.id,
-        title: chat.title || chat.first_name || username,
+        title,
         description: chat.description || chat.bio || '',
         username: chat.username || username,
         type: chat.type,
-        photo: chat.photo ? `https://t.me/i/userpic/320/${username}.jpg` : null,
+        photo,
       })
     } catch (e) {
-      // Если бот не в канале — возвращаем базовую инфу
+      // Если не можем получить инфу — возвращаем базовую с фото
+      const cleanUsername = username.replace('@', '')
       res.json({
-        title: username,
+        title: cleanUsername,
         description: '',
-        username: username,
-        photo: `https://t.me/i/userpic/320/${username}.jpg`,
+        username: cleanUsername,
+        photo: `https://t.me/i/userpic/320/${cleanUsername}.jpg`,
       })
     }
   } catch (e) {
