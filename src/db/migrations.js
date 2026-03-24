@@ -101,13 +101,21 @@ export async function runMigrations() {
       ('task_price',          '0.002'),
       ('task_ref_bonus',      '0.0005'),
       ('task_project_fee',    '0.0005'),
-      ('project_wallet',      process.env.PROJECT_WALLET || ''),
+      ('project_wallet',      ''),
       ('min_deposit_ton',     '0.5'),
       ('min_deposit',          '0.01'),
       ('min_withdraw',         '0.01'),
       ('min_reinvest',         '0.001')
     ON CONFLICT (key) DO NOTHING;
   `)
+
+  // Sync PROJECT_WALLET from env to DB if set
+  if (process.env.PROJECT_WALLET) {
+    await pool.query(
+      "INSERT INTO settings (key,value) VALUES ('project_wallet',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value WHERE settings.value=''",
+      [process.env.PROJECT_WALLET]
+    )
+  }
 
   console.log('✅ Migrations done')
 }
