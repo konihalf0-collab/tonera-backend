@@ -194,7 +194,7 @@ router.post('/withdraw', async (req, res) => {
     )
 
     await client.query('COMMIT')
-    res.json({ ok: true })
+    res.json({ ok: true, netWithdraw, fee })
   } catch (e) {
     await client.query('ROLLBACK')
     console.error(e)
