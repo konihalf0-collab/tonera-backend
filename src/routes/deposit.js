@@ -1,5 +1,7 @@
 import { Router } from 'express'
 import pool from '../db/index.js'
+import { getBot } from '../bot.js'
+import { ADMIN_TG_ID } from '../config.js'
 
 const router = Router()
 
@@ -115,6 +117,22 @@ router.post('/withdraw', async (req, res) => {
     )
 
     await client.query('COMMIT')
+
+    // Уведомление админу в Telegram
+    try {
+      const bot = getBot()
+      if (bot) {
+        await bot.sendMessage(ADMIN_TG_ID,
+          `💸 *Новая заявка на вывод*\n\n` +
+          `👤 ${user.username ? '@' + user.username : user.first_name}\n` +
+          `💰 Сумма: *${withdrawAmount} TON*\n` +
+          `📬 Адрес: \`${wallet_address}\`\n\n` +
+          `Открой админку → Заявки`,
+          { parse_mode: 'Markdown' }
+        )
+      }
+    } catch (e) { console.error('Notify error:', e.message) }
+
     res.json({ ok: true, message: 'Заявка на вывод создана. Обработка до 24 часов.' })
   } catch (e) {
     await client.query('ROLLBACK')
