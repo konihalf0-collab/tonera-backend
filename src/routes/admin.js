@@ -107,6 +107,7 @@ router.delete('/users/:id', adminOnly, async (req, res) => {
     await client.query('DELETE FROM referrals WHERE referrer_id=$1 OR referred_id=$1', [req.params.id])
     await client.query('DELETE FROM transactions WHERE user_id=$1', [req.params.id])
     await client.query('DELETE FROM stakes WHERE user_id=$1', [req.params.id])
+    await client.query('UPDATE tasks SET creator_id=NULL WHERE creator_id=$1', [req.params.id])
     await client.query('DELETE FROM users WHERE id=$1', [req.params.id])
     await client.query('COMMIT')
     res.json({ ok: true })
