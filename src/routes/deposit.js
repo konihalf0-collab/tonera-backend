@@ -166,7 +166,8 @@ router.post('/withdraw', async (req, res) => {
         await bot.sendMessage(ADMIN_TG_ID,
           `💸 *Новая заявка на вывод*\n\n` +
           `👤 ${user.username ? '@' + user.username : user.first_name}\n` +
-          `💰 Сумма: *${withdrawAmount} TON*\n` +
+          `💰 К выплате: *${withdrawAmount} TON*\n` +
+          `🏦 Комиссия: *${fee} TON*\n` +
           `📬 Адрес: \`${wallet_address}\`\n\n` +
           `Открой админку → Заявки`,
           { parse_mode: 'Markdown' }
