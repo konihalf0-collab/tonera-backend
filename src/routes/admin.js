@@ -102,6 +102,11 @@ router.post('/users/:id/unblock', adminOnly, async (req, res) => {
 router.delete('/users/:id', adminOnly, async (req, res) => {
   const client = await pool.connect()
   try {
+    // Нельзя удалить себя
+    const { rows: [target] } = await client.query('SELECT telegram_id FROM users WHERE id=$1', [req.params.id])
+    if (target && Number(target.telegram_id) === ADMIN_TG_ID) {
+      return res.status(400).json({ error: 'Cannot delete yourself' })
+    }
     await client.query('BEGIN')
     await client.query('DELETE FROM user_tasks WHERE user_id=$1', [req.params.id])
     await client.query('DELETE FROM referrals WHERE referrer_id=$1 OR referred_id=$1', [req.params.id])
