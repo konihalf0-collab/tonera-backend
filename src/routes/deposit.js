@@ -71,7 +71,7 @@ router.post('/confirm', async (req, res) => {
 
     await client.query(
       `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'deposit',$2,$3)`,
-      [user.id, depositAmount, tx_hash ? `tx:${tx_hash}` : 'Пополнение через TON']
+      [user.id, depositAmount, 'Пополнение через TON']
     )
 
     await client.query('COMMIT')
