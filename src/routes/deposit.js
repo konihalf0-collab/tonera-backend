@@ -127,7 +127,7 @@ router.post('/withdraw', async (req, res) => {
 
     await client.query(
       `INSERT INTO transactions (user_id,type,amount,label,status) VALUES ($1,'withdraw',$2,$3,'pending')`,
-      [user.id, -withdrawAmount, `Вывод на ${wallet_address.slice(0,8)}...`]
+      [user.id, -withdrawAmount, `Вывод на ${wallet_address}`]
     )
 
     await client.query('COMMIT')
