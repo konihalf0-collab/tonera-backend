@@ -200,3 +200,43 @@ router.get('/users/:id/stats', adminOnly, async (req, res) => {
     res.json({ user, txs, stakes, tasks, stats: { totalDeposit, totalWithdraw, totalStaked, tasksCount: tasks.length } })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
+
+// GET /api/admin/maintenance
+router.get('/maintenance', adminOnly, async (req, res) => {
+  try {
+    const { rows: [r] } = await pool.query("SELECT value FROM settings WHERE key='maintenance'")
+    res.json({ maintenance: r?.value || '0' })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// POST /api/admin/maintenance
+router.post('/maintenance', adminOnly, async (req, res) => {
+  try {
+    await pool.query("UPDATE settings SET value=$1 WHERE key='maintenance'", [req.body.value])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// GET /api/admin/backup
+router.get('/backup', adminOnly, async (req, res) => {
+  try {
+    const [users, stakes, tasks, transactions, settings] = await Promise.all([
+      pool.query('SELECT * FROM users'),
+      pool.query('SELECT * FROM stakes'),
+      pool.query('SELECT * FROM tasks'),
+      pool.query('SELECT * FROM transactions ORDER BY created_at DESC LIMIT 10000'),
+      pool.query('SELECT * FROM settings'),
+    ])
+    const backup = {
+      date: new Date().toISOString(),
+      users: users.rows,
+      stakes: stakes.rows,
+      tasks: tasks.rows,
+      transactions: transactions.rows,
+      settings: settings.rows,
+    }
+    res.setHeader('Content-Type', 'application/json')
+    res.setHeader('Content-Disposition', `attachment; filename=tonera-backup-${new Date().toISOString().slice(0,10)}.json`)
+    res.json(backup)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
