@@ -240,3 +240,165 @@ router.get('/backup', adminOnly, async (req, res) => {
     res.json(backup)
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
+
+// POST /api/admin/restore — восстановление из бэкапа
+router.post('/restore', adminOnly, async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const { users, stakes, tasks, transactions, settings } = req.body
+    if (!users || !stakes) return res.status(400).json({ error: 'Invalid backup file' })
+
+    await client.query('BEGIN')
+
+    // Восстанавливаем настройки
+    if (settings?.length) {
+      for (const s of settings) {
+        await client.query(
+          'INSERT INTO settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2',
+          [s.key, s.value]
+        )
+      }
+    }
+
+    // Восстанавливаем пользователей
+    for (const u of users) {
+      await client.query(`
+        INSERT INTO users (id,telegram_id,username,first_name,balance_ton,bonus_balance,ref_code,referred_by,referral_count,is_blocked,ton_address,welcome_bonus_claimed,pending_ref,created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ON CONFLICT (id) DO UPDATE SET
+          balance_ton=$5, bonus_balance=$6, referral_count=$9, is_blocked=$10, ton_address=$11
+      `, [u.id,u.telegram_id,u.username,u.first_name,u.balance_ton,u.bonus_balance,u.ref_code,u.referred_by,u.referral_count,u.is_blocked,u.ton_address,u.welcome_bonus_claimed,u.pending_ref,u.created_at])
+    }
+
+    // Восстанавливаем стейки
+    for (const s of stakes) {
+      await client.query(`
+        INSERT INTO stakes (id,user_id,amount,earned,started_at,status,created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        ON CONFLICT (id) DO UPDATE SET amount=$3, earned=$4, status=$6
+      `, [s.id,s.user_id,s.amount,s.earned,s.started_at,s.status,s.created_at])
+    }
+
+    // Восстанавливаем задания
+    if (tasks?.length) {
+      for (const t of tasks) {
+        await client.query(`
+          INSERT INTO tasks (id,creator_id,type,title,description,link,channel_title,channel_photo,icon,reward,price_per_exec,ref_bonus,project_fee,max_executions,executions,budget,active,created_at)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+          ON CONFLICT (id) DO NOTHING
+        `, [t.id,t.creator_id,t.type,t.title,t.description,t.link,t.channel_title,t.channel_photo,t.icon,t.reward,t.price_per_exec,t.ref_bonus,t.project_fee,t.max_executions,t.executions,t.budget,t.active,t.created_at])
+      }
+    }
+
+    await client.query('COMMIT')
+    res.json({ ok: true, restored: { users: users.length, stakes: stakes.length, tasks: tasks?.length || 0 } })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    console.error(e)
+    res.status(500).json({ error: e.message })
+  } finally {
+    client.release()
+  }
+})
+
+// POST /api/admin/restore — восстановление из бэкапа
+router.post('/restore', adminOnly, async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const { users, stakes, tasks, transactions, settings } = req.body
+    if (!users || !stakes) return res.status(400).json({ error: 'Invalid backup file' })
+
+    await client.query('BEGIN')
+
+    // Восстанавливаем настройки
+    if (settings) {
+      for (const s of settings) {
+        await client.query(
+          'INSERT INTO settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2',
+          [s.key, s.value]
+        )
+      }
+    }
+
+    // Восстанавливаем пользователей
+    for (const u of users) {
+      await client.query(`
+        INSERT INTO users (id,telegram_id,username,first_name,balance_ton,bonus_balance,welcome_bonus_claimed,ref_code,referred_by,referral_count,is_blocked,ton_address,pending_ref,created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        ON CONFLICT (id) DO UPDATE SET
+          balance_ton=$5, bonus_balance=$6, referral_count=$10, is_blocked=$11, ton_address=$12
+      `, [u.id,u.telegram_id,u.username,u.first_name,u.balance_ton,u.bonus_balance,u.welcome_bonus_claimed,u.ref_code,u.referred_by,u.referral_count,u.is_blocked,u.ton_address,u.pending_ref,u.created_at])
+    }
+
+    // Восстанавливаем стейки
+    for (const s of stakes) {
+      await client.query(`
+        INSERT INTO stakes (id,user_id,amount,earned,started_at,status,created_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+        ON CONFLICT (id) DO UPDATE SET amount=$3, earned=$4, status=$6
+      `, [s.id,s.user_id,s.amount,s.earned,s.started_at,s.status,s.created_at])
+    }
+
+    // Восстанавливаем задания
+    if (tasks) {
+      for (const t of tasks) {
+        await client.query(`
+          INSERT INTO tasks (id,creator_id,type,title,description,link,channel_title,channel_photo,icon,reward,price_per_exec,ref_bonus,project_fee,max_executions,executions,budget,active,created_at)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+          ON CONFLICT (id) DO NOTHING
+        `, [t.id,t.creator_id,t.type,t.title,t.description,t.link,t.channel_title,t.channel_photo,t.icon,t.reward,t.price_per_exec,t.ref_bonus,t.project_fee,t.max_executions,t.executions,t.budget,t.active,t.created_at])
+      }
+    }
+
+    await client.query('COMMIT')
+    res.json({ ok: true, restored: { users: users.length, stakes: stakes.length, tasks: tasks?.length || 0 } })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    console.error(e)
+    res.status(500).json({ error: e.message })
+  } finally {
+    client.release()
+  }
+})
+
+// POST /api/admin/restore — восстановление из бэкапа
+router.post('/restore', adminOnly, async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const { users, stakes, tasks, transactions, settings } = req.body
+    if (!users || !stakes) return res.status(400).json({ error: 'Invalid backup file' })
+
+    await client.query('BEGIN')
+
+    // Восстанавливаем настройки
+    if (settings?.length) {
+      for (const s of settings) {
+        await client.query(
+          'INSERT INTO settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=$2',
+          [s.key, s.value]
+        )
+      }
+    }
+
+    // Восстанавливаем пользователей
+    for (const u of users) {
+      await client.query(
+        `INSERT INTO users (telegram_id,username,first_name,balance_ton,bonus_balance,ref_code,referred_by,referral_count,is_blocked,ton_address,welcome_bonus_claimed)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         ON CONFLICT (telegram_id) DO UPDATE SET
+           username=$2,first_name=$3,balance_ton=$4,bonus_balance=$5,
+           referral_count=$8,is_blocked=$9,ton_address=$10`,
+        [u.telegram_id,u.username,u.first_name,u.balance_ton,u.bonus_balance||0,u.ref_code,u.referred_by,u.referral_count||0,u.is_blocked||false,u.ton_address,u.welcome_bonus_claimed||false]
+      )
+    }
+
+    await client.query('COMMIT')
+    res.json({ ok: true, restored: { users: users.length, settings: settings?.length || 0 } })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    console.error(e)
+    res.status(500).json({ error: e.message })
+  } finally {
+    client.release()
+  }
+})
