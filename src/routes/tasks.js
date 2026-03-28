@@ -245,4 +245,65 @@ router.post('/:id/complete', async (req, res) => {
   }
 })
 
+// POST /api/tasks/:id/pause — поставить на паузу
+router.post('/:id/pause', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const tgId = req.telegramUser.id
+    const { rows: [user] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [tgId])
+    const { rows: [task] } = await client.query('SELECT * FROM tasks WHERE id=$1 AND creator_id=$2', [req.params.id, user?.id])
+    if (!task) return res.status(404).json({ error: 'Task not found' })
+    await client.query('UPDATE tasks SET active=false WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+  finally { client.release() }
+})
+
+// POST /api/tasks/:id/resume — возобновить
+router.post('/:id/resume', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const tgId = req.telegramUser.id
+    const { rows: [user] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [tgId])
+    const { rows: [task] } = await client.query('SELECT * FROM tasks WHERE id=$1 AND creator_id=$2', [req.params.id, user?.id])
+    if (!task) return res.status(404).json({ error: 'Task not found' })
+    if (task.executions >= task.max_executions) return res.status(400).json({ error: 'Лимит исчерпан. Докупите выполнения.' })
+    await client.query('UPDATE tasks SET active=true WHERE id=$1', [req.params.id])
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+  finally { client.release() }
+})
+
+// POST /api/tasks/:id/buy-more — докупить выполнения
+router.post('/:id/buy-more', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const tgId = req.telegramUser.id
+    const { count } = req.body
+    const ALLOWED = [50, 100, 200, 500, 1000]
+    if (!ALLOWED.includes(Number(count))) return res.status(400).json({ error: 'Invalid count' })
+
+    await client.query('BEGIN')
+    const { rows: [user] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [tgId])
+    const { rows: [task] } = await client.query('SELECT * FROM tasks WHERE id=$1 AND creator_id=$2', [req.params.id, user?.id])
+    if (!task) return res.status(404).json({ error: 'Task not found' })
+
+    const { rows: [s] } = await client.query("SELECT key,value FROM settings WHERE key='task_price'")
+    const pricePerExec = parseFloat(s?.value || 0.002)
+    const cost = pricePerExec * count
+
+    if (parseFloat(user.balance_ton) < cost) return res.status(400).json({ error: 'Insufficient balance' })
+
+    await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [cost, user.id])
+    await client.query('UPDATE tasks SET max_executions=max_executions+$1, budget=budget+$2, active=true WHERE id=$3', [count, cost, task.id])
+    await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'task_budget',$2,$3)", [user.id, -cost, `Докупка выполнений: ${task.title}`])
+
+    await client.query('COMMIT')
+    res.json({ ok: true, cost })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    res.status(500).json({ error: e.message })
+  } finally { client.release() }
+})
+
 export default router
