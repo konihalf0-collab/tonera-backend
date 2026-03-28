@@ -106,6 +106,7 @@ export async function runMigrations() {
       ('withdraw_fee',        '0'),
       ('min_withdraw_ton',   '1'),
       ('maintenance',         '0'),
+      ('launch_date',         '2025-03-01'),
       ('min_collect',         '0.001'),
       ('min_deposit',          '0.01'),
       ('min_withdraw',         '0.01'),

@@ -13,7 +13,7 @@ function calcEarned(amount, startedAt) {
 router.get('/info', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT key, value FROM settings WHERE key IN ('min_deposit','min_withdraw','min_reinvest','min_collect','staking_withdraw_fee','task_price','task_reward','task_ref_bonus','task_project_fee')"
+      "SELECT key, value FROM settings WHERE key IN ('min_deposit','min_withdraw','min_reinvest','min_collect','staking_withdraw_fee','task_price','task_reward','task_ref_bonus','task_project_fee','launch_date')"
     )
     const mins = {}
     const prices = {}
@@ -21,6 +21,7 @@ router.get('/info', async (req, res) => {
     rows.forEach(r => {
       if (r.key.startsWith('min_')) mins[r.key.replace('min_', '')] = parseFloat(r.value)
       else if (r.key === 'staking_withdraw_fee') stakingWithdrawFee = parseFloat(r.value)
+      else if (r.key === 'launch_date') prices['launch_date'] = r.value
       else prices[r.key] = parseFloat(r.value)
     })
     res.json({ daily_rate: DAILY_RATE, daily_percent: 1, mins, prices, staking_withdraw_fee: stakingWithdrawFee })
@@ -174,6 +175,18 @@ router.post('/withdraw', async (req, res) => {
       const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=5651190404')
       if (admin) {
         await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [fee, admin.id])
+        // Уведомление админу
+        try {
+          const { getBot } = await import('../bot.js')
+          const bot = getBot()
+          if (bot) {
+            const { rows: [u] } = await client.query('SELECT * FROM users WHERE id=$1', [stake.uid])
+            await bot.sendMessage(5651190404,
+              `💰 *Комиссия за вывод из стейка*\n\n👤 ${u?.username ? '@'+u.username : u?.first_name}\n💎 Вывод: *${withdrawAmt} TON*\n🏦 Ваша комиссия: *${fee.toFixed(4)} TON*`,
+              { parse_mode: 'Markdown' }
+            )
+          }
+        } catch {}
       }
     }
 
