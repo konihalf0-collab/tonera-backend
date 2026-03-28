@@ -70,7 +70,7 @@ router.post('/create', async (req, res) => {
       `INSERT INTO tasks
          (creator_id, type, title, link, channel_title, channel_photo, icon,
           max_executions, executions, budget, reward, price_per_exec, ref_bonus, project_fee, active)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11,$12,$13,true) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11,$12,$13,false) RETURNING *`,
       [
         user.id, type || 'subscribe', title, link || null,
         channel_title || null, channel_photo || null,
@@ -87,6 +87,33 @@ router.post('/create', async (req, res) => {
     )
 
     await client.query('COMMIT')
+
+    // Уведомление админу о новом задании
+    try {
+      const { getBot } = await import('../bot.js')
+      const { ADMIN_TG_ID } = await import('../config.js')
+      const bot = getBot()
+      if (bot) {
+        await bot.sendMessage(ADMIN_TG_ID,
+          `📋 *Новое задание на проверку*\n\n` +
+          `👤 ${user.username ? '@' + user.username : user.first_name}\n` +
+          `📌 ${title}\n` +
+          `🔗 ${link || '—'}\n` +
+          `🔢 Выполнений: ${max_executions}\n` +
+          `💰 Бюджет: ${budget.toFixed(4)} TON`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '✅ Одобрить', callback_data: `approve_task:${task.id}` },
+                { text: '❌ Отклонить', callback_data: `reject_task:${task.id}` }
+              ]]
+            }
+          }
+        )
+      }
+    } catch (e) { console.error('Notify error:', e.message) }
+
     res.json({ task })
   } catch (e) {
     await client.query('ROLLBACK')

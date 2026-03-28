@@ -20,6 +20,46 @@ export function getBot() { return bot }
 export function processUpdate(update) { if (bot) bot.processUpdate(update) }
 
 export function setupBotHandlers(bot) {
+  // Обработка inline кнопок одобрения/отклонения заданий
+  bot.on('callback_query', async (query) => {
+    const data = query.data
+    try {
+      if (data.startsWith('approve_task:')) {
+        const taskId = data.split(':')[1]
+        await pool.query('UPDATE tasks SET active=true WHERE id=$1', [taskId])
+        await bot.answerCallbackQuery(query.id, { text: '✅ Задание одобрено' })
+        await bot.editMessageReplyMarkup({ inline_keyboard: [[{ text: '✅ ОДОБРЕНО', callback_data: 'done' }]] }, {
+          chat_id: query.message.chat.id,
+          message_id: query.message.message_id
+        })
+        // Уведомить заказчика
+        const { rows: [task] } = await pool.query('SELECT t.*, u.telegram_id FROM tasks t JOIN users u ON t.creator_id=u.id WHERE t.id=$1', [taskId])
+        if (task) {
+          await bot.sendMessage(task.telegram_id, `✅ Ваше задание *${task.title}* одобрено и теперь активно!`, { parse_mode: 'Markdown' })
+        }
+      } else if (data.startsWith('reject_task:')) {
+        const taskId = data.split(':')[1]
+        // Возвращаем бюджет и удаляем задание
+        const { rows: [task] } = await pool.query('SELECT t.*, u.id as uid, u.telegram_id FROM tasks t JOIN users u ON t.creator_id=u.id WHERE t.id=$1', [taskId])
+        if (task) {
+          await pool.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [task.budget, task.uid])
+          await pool.query('DELETE FROM tasks WHERE id=$1', [taskId])
+          await bot.sendMessage(task.telegram_id, `❌ Ваше задание *${task.title}* отклонено. Бюджет ${parseFloat(task.budget).toFixed(4)} TON возвращён.`, { parse_mode: 'Markdown' })
+        }
+        await bot.answerCallbackQuery(query.id, { text: '❌ Задание отклонено' })
+        await bot.editMessageReplyMarkup({ inline_keyboard: [[{ text: '❌ ОТКЛОНЕНО', callback_data: 'done' }]] }, {
+          chat_id: query.message.chat.id,
+          message_id: query.message.message_id
+        })
+      } else {
+        await bot.answerCallbackQuery(query.id)
+      }
+    } catch (e) {
+      console.error('Callback error:', e.message)
+      await bot.answerCallbackQuery(query.id, { text: 'Ошибка' })
+    }
+  })
+
   bot.onText(/\/start(.*)/, async (msg, match) => {
     const tgId = msg.from.id
     const startParam = match[1]?.trim()
