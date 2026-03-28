@@ -175,6 +175,10 @@ router.post('/withdraw', async (req, res) => {
       const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=5651190404')
       if (admin) {
         await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [fee, admin.id])
+        await client.query(
+          "INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'fee',$2,'Комиссия стейкинга')",
+          [admin.id, fee]
+        )
         // Уведомление админу
         try {
           const { getBot } = await import('../bot.js')

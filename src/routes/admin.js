@@ -38,7 +38,7 @@ router.get('/stats', adminOnly, async (req, res) => {
         (SELECT COUNT(*) FROM referrals) as total_referrals,
         (SELECT COUNT(*) FROM user_tasks) as tasks_completed,
         (SELECT COUNT(*) FROM tasks WHERE active=true) as active_tasks,
-        (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='fee' AND label LIKE '%стейк%') as staking_fee_earned,
+        (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='fee' AND label='Комиссия стейкинга') as staking_fee_earned,
         (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='fee' AND label LIKE '%задани%') as task_fee_earned,
         (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='deposit') as total_deposited,
         (SELECT ABS(COALESCE(SUM(amount),0)) FROM transactions WHERE type='withdraw') as total_withdrawn
