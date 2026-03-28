@@ -107,6 +107,8 @@ export async function runMigrations() {
       ('min_withdraw_ton',   '1'),
       ('maintenance',         '0'),
       ('launch_date',         '2025-03-01'),
+      ('spin_price',          '0.1'),
+      ('spin_enabled',        '1'),
       ('min_collect',         '0.001'),
       ('min_deposit',          '0.01'),
       ('min_withdraw',         '0.01'),

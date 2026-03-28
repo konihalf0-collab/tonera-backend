@@ -14,6 +14,7 @@ import referralRoutes from './routes/referrals.js'
 import walletRoutes   from './routes/wallet.js'
 import adminRoutes    from './routes/admin.js'
 import depositRoutes  from './routes/deposit.js'
+import spinRoutes     from './routes/spin.js'
 import channelsRoutes from './routes/channels.js'
 import bonusRoutes    from './routes/bonus.js'
 
@@ -53,6 +54,7 @@ app.use('/api/wallet',    walletRoutes)
 app.use('/api/user',      walletRoutes)
 app.use('/api/admin',     adminRoutes)
 app.use('/api/deposit',   depositRoutes)
+app.use('/api/spin',      spinRoutes)
 app.use('/api/bonus',     bonusRoutes)
 
 async function bootstrap() {
