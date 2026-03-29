@@ -85,9 +85,11 @@ router.post('/play', async (req, res) => {
       cumulative += sectors[i].chance
       if (rand <= cumulative) { result = sectors[i]; sectorIndex = i; break }
     }
-    // Если приз больше пула — не выплачиваем (крутим на сектор но засчитываем как ничего)
+    // Если приз больше пула — крутим на сектор "Ничего"
     if (result.type === 'ton' && result.value > currentPool) {
-      result = { ...result, type: 'nothing', _blocked: true }
+      const nothingIndex = sectors.findIndex(s => s.type === 'nothing')
+      sectorIndex = nothingIndex >= 0 ? nothingIndex : sectorIndex
+      result = { ...sectors[nothingIndex >= 0 ? nothingIndex : 0], type: 'nothing' }
     }
 
     // Начисляем приз и пишем одну запись в историю
