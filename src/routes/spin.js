@@ -23,7 +23,7 @@ async function getSectors(client) {
 router.get('/info', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT key, value FROM settings WHERE key IN ('spin_price','spin_enabled','spin_jackpot','spin_jackpot_fee','spin_sectors')"
+      "SELECT key, value FROM settings WHERE key IN ('spin_price','spin_enabled','spin_jackpot','spin_jackpot_fee','spin_sectors','spin_pool')"
     )
     const data = { spin_price: 0.1, spin_enabled: '1', spin_jackpot: 0, spin_jackpot_fee: 10, sectors: DEFAULT_SECTORS }
     rows.forEach(r => {
@@ -48,13 +48,15 @@ router.post('/play', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' })
 
     const { rows: settings } = await client.query(
-      "SELECT key, value FROM settings WHERE key IN ('spin_price','spin_enabled','spin_jackpot','spin_jackpot_fee','spin_sectors')"
+      "SELECT key, value FROM settings WHERE key IN ('spin_price','spin_enabled','spin_jackpot','spin_jackpot_fee','spin_sectors','spin_pool')"
     )
     const spinPrice = parseFloat(settings.find(s => s.key === 'spin_price')?.value || 0.1)
     const spinEnabled = settings.find(s => s.key === 'spin_enabled')?.value !== '0'
     const jackpot = parseFloat(settings.find(s => s.key === 'spin_jackpot')?.value || 0)
+    const spinPool = parseFloat(settings.find(s => s.key === 'spin_pool')?.value || 0)
     const jackpotFeePercent = parseFloat(settings.find(s => s.key === 'spin_jackpot_fee')?.value || 10) / 100
 
+    const spinBank = parseFloat(settings.find(s => s.key === 'spin_bank')?.value || 0)
     if (!spinEnabled) return res.status(400).json({ error: 'Спин временно недоступен' })
     if (parseFloat(user.balance_ton) < spinPrice) {
       return res.status(400).json({ error: `Недостаточно средств. Нужно ${spinPrice} TON` })
@@ -63,28 +65,38 @@ router.post('/play', async (req, res) => {
     let sectors = DEFAULT_SECTORS
     try { sectors = JSON.parse(settings.find(s => s.key === 'spin_sectors')?.value || '[]') || DEFAULT_SECTORS } catch {}
 
-    // Списываем стоимость (без записи — запишем одной строкой с результатом)
+    // Списываем стоимость
     await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [spinPrice, user.id])
+    // Пополняем банк спинов
+    await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_bank'", [spinPrice])
 
     // Пополняем джекпот
     const jackpotFee = spinPrice * jackpotFeePercent
     const adminFee = spinPrice - jackpotFee
     await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_jackpot'", [jackpotFee])
 
-    // Комиссия проекту
+    // Комиссия проекту + пополняем пул выплат
     const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
     if (admin && adminFee > 0) {
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [adminFee, admin.id])
     }
+    await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_pool'", [adminFee])
 
-    // Определяем выигрыш
+    // Определяем выигрыш — фильтруем секторы где приз > пула
+    const currentPool = spinPool + adminFee
+    const availableSectors = sectors.map((s, i) => ({
+      ...s, originalIndex: i,
+      // Если приз больше пула — заменяем на 'nothing'
+      type: (s.type === 'ton' && s.value > currentPool) ? 'nothing' : s.type,
+      label: (s.type === 'ton' && s.value > currentPool) ? '😢 Ничего' : s.label,
+    }))
     const rand = Math.random() * 100
     let cumulative = 0
-    let result = sectors[0]
+    let result = availableSectors[0]
     let sectorIndex = 0
-    for (let i = 0; i < sectors.length; i++) {
-      cumulative += sectors[i].chance
-      if (rand <= cumulative) { result = sectors[i]; sectorIndex = i; break }
+    for (let i = 0; i < availableSectors.length; i++) {
+      cumulative += availableSectors[i].chance
+      if (rand <= cumulative) { result = availableSectors[i]; sectorIndex = availableSectors[i].originalIndex; break }
     }
 
     // Начисляем приз и пишем одну запись в историю
@@ -92,6 +104,7 @@ router.post('/play', async (req, res) => {
       const prize = jackpot + jackpotFee
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [prize, user.id])
       await client.query("UPDATE settings SET value='0' WHERE key='spin_jackpot'")
+      await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)-$1 AS TEXT) WHERE key='spin_bank'", [prize])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',$2,$3)", [user.id, prize - spinPrice, `🎰 Спин: ДЖЕКПОТ +${prize.toFixed(4)} TON (ставка -${spinPrice} TON)`])
       result = { ...result, value: prize }
       // Уведомление админу
@@ -105,6 +118,7 @@ router.post('/play', async (req, res) => {
       } catch {}
     } else if (result.type === 'ton' && result.value > 0) {
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [result.value, user.id])
+      await client.query("UPDATE settings SET value=CAST(GREATEST(CAST(value AS DECIMAL)-$1,0) AS TEXT) WHERE key='spin_pool'", [result.value])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',$2,$3)", [user.id, result.value - spinPrice, `🎰 Спин: +${result.value} TON (ставка -${spinPrice} TON)`])
     } else {
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',$2,$3)", [user.id, -spinPrice, `🎰 Спин: Ничего (ставка -${spinPrice} TON)`])
