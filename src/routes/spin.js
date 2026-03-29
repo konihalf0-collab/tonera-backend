@@ -77,21 +77,19 @@ router.post('/play', async (req, res) => {
     // Весь spinPrice пополняет пул выплат
     await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_pool'", [spinPrice])
 
-    // Определяем выигрыш — фильтруем секторы где приз > пула
-    const currentPool = spinPool + adminFee
-    const availableSectors = sectors.map((s, i) => ({
-      ...s, originalIndex: i,
-      // Если приз больше пула — заменяем на 'nothing'
-      type: (s.type === 'ton' && s.value > currentPool) ? 'nothing' : s.type,
-      label: (s.type === 'ton' && s.value > currentPool) ? '😢 Ничего' : s.label,
-    }))
+    // Определяем выигрыш
+    const currentPool = spinPool + spinPrice
     const rand = Math.random() * 100
     let cumulative = 0
-    let result = availableSectors[0]
+    let result = sectors[0]
     let sectorIndex = 0
-    for (let i = 0; i < availableSectors.length; i++) {
-      cumulative += availableSectors[i].chance
-      if (rand <= cumulative) { result = availableSectors[i]; sectorIndex = availableSectors[i].originalIndex; break }
+    for (let i = 0; i < sectors.length; i++) {
+      cumulative += sectors[i].chance
+      if (rand <= cumulative) { result = sectors[i]; sectorIndex = i; break }
+    }
+    // Если приз больше пула — не выплачиваем (крутим на сектор но засчитываем как ничего)
+    if (result.type === 'ton' && result.value > currentPool) {
+      result = { ...result, type: 'nothing', _blocked: true }
     }
 
     // Начисляем приз и пишем одну запись в историю
