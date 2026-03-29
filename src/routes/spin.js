@@ -75,8 +75,8 @@ router.post('/play', async (req, res) => {
     await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_pool'", [spinPrice - jackpotFee])
     await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_jackpot'", [jackpotFee])
 
-    // Определяем выигрыш
-    const currentPool = spinPool + spinPrice
+    // Определяем выигрыш — пул после пополнения
+    const currentPool = spinPool + (spinPrice - jackpotFee)
     const rand = Math.random() * 100
     let cumulative = 0
     let result = sectors[0]
