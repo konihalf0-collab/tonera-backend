@@ -44,6 +44,7 @@ router.get('/stats', adminOnly, async (req, res) => {
         (SELECT ABS(COALESCE(SUM(amount),0)) FROM transactions WHERE type='withdraw') as total_withdrawn,
         (SELECT COUNT(*) FROM transactions WHERE type='spin_result') as total_spins,
         (SELECT COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) - SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) FROM transactions WHERE type='spin_result') as spin_revenue,
+        (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='spin_profit') as spin_profit,
         (SELECT value FROM settings WHERE key='spin_jackpot') as current_jackpot,
         (SELECT value FROM settings WHERE key='spin_pool') as spin_pool
     `)

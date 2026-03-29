@@ -81,6 +81,7 @@ router.post('/play', async (req, res) => {
     const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
     if (admin && profitFee > 0) {
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [profitFee, admin.id])
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_profit',$2,'Прибыль спина')", [admin.id, profitFee])
     }
 
     // Определяем выигрыш — пул после пополнения
