@@ -41,7 +41,9 @@ router.get('/stats', adminOnly, async (req, res) => {
         (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='fee' AND label='Комиссия стейкинга') as staking_fee_earned,
         (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='fee' AND label NOT LIKE '%стейкинга%') as task_fee_earned,
         (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='deposit') as total_deposited,
-        (SELECT ABS(COALESCE(SUM(amount),0)) FROM transactions WHERE type='withdraw') as total_withdrawn
+        (SELECT ABS(COALESCE(SUM(amount),0)) FROM transactions WHERE type='withdraw') as total_withdrawn,
+        (SELECT COUNT(*) FROM transactions WHERE type='spin_result') as total_spins,
+        (SELECT ABS(COALESCE(SUM(amount),0)) FROM transactions WHERE type='spin_result' AND amount < 0) as spin_revenue
     `)
     res.json(stats)
   } catch (e) { res.status(500).json({ error: e.message }) }
