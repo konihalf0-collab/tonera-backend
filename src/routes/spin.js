@@ -63,9 +63,8 @@ router.post('/play', async (req, res) => {
     let sectors = DEFAULT_SECTORS
     try { sectors = JSON.parse(settings.find(s => s.key === 'spin_sectors')?.value || '[]') || DEFAULT_SECTORS } catch {}
 
-    // Списываем стоимость
+    // Списываем стоимость (без записи — запишем одной строкой с результатом)
     await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [spinPrice, user.id])
-    await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin',$2,'Спин')", [user.id, -spinPrice])
 
     // Пополняем джекпот
     const jackpotFee = spinPrice * jackpotFeePercent
@@ -88,18 +87,18 @@ router.post('/play', async (req, res) => {
       if (rand <= cumulative) { result = sectors[i]; sectorIndex = i; break }
     }
 
-    // Начисляем приз
+    // Начисляем приз и пишем одну запись в историю
     if (result.type === 'jackpot') {
       const prize = jackpot + jackpotFee
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [prize, user.id])
       await client.query("UPDATE settings SET value='0' WHERE key='spin_jackpot'")
-      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,$3)", [user.id, prize, `🎰 ДЖЕКПОТ: ${prize.toFixed(4)} TON`])
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',$2,$3)", [user.id, prize - spinPrice, `🎰 Спин: ДЖЕКПОТ +${prize.toFixed(4)} TON (ставка -${spinPrice} TON)`])
       result = { ...result, value: prize }
     } else if (result.type === 'ton' && result.value > 0) {
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [result.value, user.id])
-      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,$3)", [user.id, result.value, `Выигрыш спина: ${result.label}`])
-    } else if (result.type === 'nothing') {
-      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',0,$2)", [user.id, `Спин: ${result.label}`])
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',$2,$3)", [user.id, result.value - spinPrice, `🎰 Спин: +${result.value} TON (ставка -${spinPrice} TON)`])
+    } else {
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',$2,$3)", [user.id, -spinPrice, `🎰 Спин: Ничего (ставка -${spinPrice} TON)`])
     }
 
     await client.query('COMMIT')
@@ -121,9 +120,7 @@ router.get('/history', async (req, res) => {
     const { rows } = await pool.query(
       `SELECT t.amount, t.label, t.created_at, t.type, u.username, u.first_name
        FROM transactions t JOIN users u ON t.user_id=u.id
-       WHERE (t.type='reward' AND t.label LIKE '%спина%')
-          OR (t.type='reward' AND t.label LIKE '%ДЖЕКПОТ%')
-          OR t.type='spin_result'
+       WHERE t.type='spin_result'
        ORDER BY t.created_at DESC LIMIT 20`
     )
     res.json(rows)
