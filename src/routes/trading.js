@@ -21,15 +21,15 @@ router.post('/bet', async (req, res) => {
   const client = await pool.connect()
   try {
     const tgId = req.telegramUser.id
-    const { amount, direction, force_result } = req.body
+    const { amount, direction, start_price, end_price } = req.body
     if (!amount || !['up','down'].includes(direction)) return res.status(400).json({ error: 'Invalid params' })
+    if (start_price === undefined || end_price === undefined) return res.status(400).json({ error: 'Price required' })
 
     const { rows: settings } = await client.query(
-      "SELECT key, value FROM settings WHERE key IN ('trading_enabled','trading_multiplier','trading_win_chance','trading_min_bet')"
+      "SELECT key, value FROM settings WHERE key IN ('trading_enabled','trading_multiplier','trading_min_bet')"
     )
     const enabled = settings.find(s => s.key === 'trading_enabled')?.value !== '0'
     const multiplier = parseFloat(settings.find(s => s.key === 'trading_multiplier')?.value || 1.9)
-    const winChance = parseFloat(settings.find(s => s.key === 'trading_win_chance')?.value || 50)
     const minBet = parseFloat(settings.find(s => s.key === 'trading_min_bet')?.value || 0.01)
 
     if (!enabled) return res.status(400).json({ error: 'Трейдинг временно недоступен' })
@@ -40,8 +40,8 @@ router.post('/bet', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' })
     if (parseFloat(user.balance_ton) < parseFloat(amount)) return res.status(400).json({ error: 'Недостаточно средств' })
 
-    // Результат — либо реальный BTC либо случайный
-    const userWon = force_result !== undefined ? force_result : (Math.random() * 100 <= winChance)
+    // Результат по реальным ценам BTC
+    const userWon = direction === 'up' ? end_price > start_price : end_price < start_price
 
     const betAmount = parseFloat(amount)
     await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [betAmount, user.id])
@@ -90,3 +90,43 @@ function generateCandles(count, goingUp) {
 }
 
 export default router
+
+// POST /api/trading/result — записать результат реального трейда (фронт знает результат по BTC)
+router.post('/result', async (req, res) => {
+  const client = await pool.connect()
+  try {
+    const tgId = req.telegramUser.id
+    const { amount, won } = req.body
+    if (!amount || won === undefined) return res.status(400).json({ error: 'Invalid params' })
+
+    const betAmount = parseFloat(amount)
+    await client.query('BEGIN')
+    const { rows: [user] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [tgId])
+    if (!user) return res.status(404).json({ error: 'User not found' })
+
+    const { rows: [ms] } = await client.query("SELECT value FROM settings WHERE key='trading_multiplier'")
+    const multiplier = parseFloat(ms?.value || 1.9)
+
+    // Списываем ставку
+    await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [betAmount, user.id])
+
+    let profit = 0
+    if (won) {
+      profit = betAmount * multiplier
+      await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [profit, user.id])
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
+        [user.id, profit - betAmount, `📈 Трейдинг BTC: +${(profit-betAmount).toFixed(4)} TON`])
+    } else {
+      const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
+      if (admin) await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betAmount, admin.id])
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
+        [user.id, -betAmount, `📉 Трейдинг BTC: -${betAmount.toFixed(4)} TON`])
+    }
+
+    await client.query('COMMIT')
+    res.json({ ok: true, won, profit })
+  } catch (e) {
+    await client.query('ROLLBACK')
+    res.status(500).json({ error: e.message })
+  } finally { client.release() }
+})
