@@ -10,6 +10,12 @@ router.post('/login', async (req, res) => {
     const tg = req.telegramUser
     if (!tg?.id) return res.status(401).json({ error: 'No user' })
 
+    // Проверка тех обслуживания
+    const { rows: [maint] } = await client.query("SELECT value FROM settings WHERE key='maintenance'")
+    if (maint?.value === '1' && Number(tg.id) !== 5651190404) {
+      return res.status(503).json({ error: '🔧 Технические работы. Скоро вернёмся!' })
+    }
+
     const refCode = crypto.randomBytes(4).toString('hex')
 
     // Upsert user
@@ -83,6 +89,11 @@ router.post('/login', async (req, res) => {
     const { rows: [freshUser] } = await client.query(
       'SELECT * FROM users WHERE id=$1', [user.id]
     )
+
+    // Проверка блокировки
+    if (freshUser.is_blocked) {
+      return res.status(403).json({ error: '🚫 Ваш аккаунт заблокирован. Обратитесь к администратору.' })
+    }
 
     res.json({ user: freshUser })
   } catch (e) {
