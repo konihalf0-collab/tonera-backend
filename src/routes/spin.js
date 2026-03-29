@@ -112,3 +112,16 @@ router.post('/play', async (req, res) => {
 })
 
 export default router
+
+// GET /api/spin/history — последние 20 выигрышей
+router.get('/history', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.amount, t.label, t.created_at, u.username, u.first_name
+       FROM transactions t JOIN users u ON t.user_id=u.id
+       WHERE t.type='reward' AND t.label LIKE '%спина%'
+       ORDER BY t.created_at DESC LIMIT 20`
+    )
+    res.json(rows)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
