@@ -113,6 +113,7 @@ export async function runMigrations() {
       ('spin_bank',           '0'),
       ('spin_jackpot_fee',    '10'),
       ('spin_pool',           '0'),
+      ('spin_profit_fee',    '20'),
       ('spin_sectors',        '[{"label":"😢 Ничего","type":"nothing","value":0,"chance":35},{"label":"💎 0.01 TON","type":"ton","value":0.01,"chance":25},{"label":"💎 0.05 TON","type":"ton","value":0.05,"chance":20},{"label":"💎 0.1 TON","type":"ton","value":0.1,"chance":12},{"label":"💎 0.5 TON","type":"ton","value":0.5,"chance":5},{"label":"💎 1 TON","type":"ton","value":1,"chance":2},{"label":"🎰 ДЖЕКПОТ","type":"jackpot","value":0,"chance":1}]'),
       ('min_collect',         '0.001'),
       ('min_deposit',          '0.01'),
