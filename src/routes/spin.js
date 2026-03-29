@@ -98,6 +98,8 @@ router.post('/play', async (req, res) => {
     } else if (result.type === 'ton' && result.value > 0) {
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [result.value, user.id])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,$3)", [user.id, result.value, `Выигрыш спина: ${result.label}`])
+    } else if (result.type === 'nothing') {
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',0,$2)", [user.id, `Спин: ${result.label}`])
     }
 
     await client.query('COMMIT')
@@ -117,9 +119,11 @@ export default router
 router.get('/history', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT t.amount, t.label, t.created_at, u.username, u.first_name
+      `SELECT t.amount, t.label, t.created_at, t.type, u.username, u.first_name
        FROM transactions t JOIN users u ON t.user_id=u.id
-       WHERE t.type='reward' AND t.label LIKE '%спина%'
+       WHERE (t.type='reward' AND t.label LIKE '%спина%')
+          OR (t.type='reward' AND t.label LIKE '%ДЖЕКПОТ%')
+          OR t.type='spin_result'
        ORDER BY t.created_at DESC LIMIT 20`
     )
     res.json(rows)
