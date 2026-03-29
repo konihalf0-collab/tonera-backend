@@ -94,6 +94,15 @@ router.post('/play', async (req, res) => {
       await client.query("UPDATE settings SET value='0' WHERE key='spin_jackpot'")
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',$2,$3)", [user.id, prize - spinPrice, `🎰 Спин: ДЖЕКПОТ +${prize.toFixed(4)} TON (ставка -${spinPrice} TON)`])
       result = { ...result, value: prize }
+      // Уведомление админу
+      try {
+        const { getBot } = await import('../bot.js')
+        const bot = getBot()
+        if (bot) await bot.sendMessage(ADMIN_TG_ID,
+          `🎰 *ДЖЕКПОТ!*\n\n👤 ${user.username ? '@'+user.username : user.first_name}\n💰 Сумма: *${prize.toFixed(4)} TON*`,
+          { parse_mode: 'Markdown' }
+        )
+      } catch {}
     } else if (result.type === 'ton' && result.value > 0) {
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [result.value, user.id])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',$2,$3)", [user.id, result.value - spinPrice, `🎰 Спин: +${result.value} TON (ставка -${spinPrice} TON)`])
