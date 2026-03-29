@@ -70,12 +70,10 @@ router.post('/play', async (req, res) => {
     // Пополняем банк спинов
     await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_bank'", [spinPrice])
 
-    // Пополняем джекпот и пул — весь spinPrice идёт в пул
+    // Весь spinPrice идёт в пул, из пула % в джекпот
     const jackpotFee = spinPrice * jackpotFeePercent
-    const adminFee = spinPrice - jackpotFee
+    await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_pool'", [spinPrice - jackpotFee])
     await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_jackpot'", [jackpotFee])
-    // Весь spinPrice пополняет пул выплат
-    await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_pool'", [spinPrice])
 
     // Определяем выигрыш
     const currentPool = spinPool + spinPrice
