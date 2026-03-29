@@ -70,17 +70,12 @@ router.post('/play', async (req, res) => {
     // Пополняем банк спинов
     await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_bank'", [spinPrice])
 
-    // Пополняем джекпот
+    // Пополняем джекпот и пул — весь spinPrice идёт в пул
     const jackpotFee = spinPrice * jackpotFeePercent
     const adminFee = spinPrice - jackpotFee
     await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_jackpot'", [jackpotFee])
-
-    // Комиссия проекту + пополняем пул выплат
-    const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
-    if (admin && adminFee > 0) {
-      await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [adminFee, admin.id])
-    }
-    await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_pool'", [adminFee])
+    // Весь spinPrice пополняет пул выплат
+    await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='spin_pool'", [spinPrice])
 
     // Определяем выигрыш — фильтруем секторы где приз > пула
     const currentPool = spinPool + adminFee
@@ -118,6 +113,7 @@ router.post('/play', async (req, res) => {
       } catch {}
     } else if (result.type === 'ton' && result.value > 0) {
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [result.value, user.id])
+      // Вычитаем приз из пула — пул уменьшается на приз, остаток остаётся в пуле
       await client.query("UPDATE settings SET value=CAST(GREATEST(CAST(value AS DECIMAL)-$1,0) AS TEXT) WHERE key='spin_pool'", [result.value])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'spin_result',$2,$3)", [user.id, result.value - spinPrice, `🎰 Спин: +${result.value} TON (ставка -${spinPrice} TON)`])
     } else {
