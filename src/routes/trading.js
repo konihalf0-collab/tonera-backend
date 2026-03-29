@@ -89,6 +89,20 @@ function generateCandles(count, goingUp) {
   return candles
 }
 
+// GET /api/trading/history
+router.get('/history', async (req, res) => {
+  try {
+    const tgId = req.telegramUser.id
+    const { rows } = await pool.query(
+      `SELECT t.* FROM transactions t JOIN users u ON t.user_id=u.id
+       WHERE u.telegram_id=$1 AND t.type='trading'
+       ORDER BY t.created_at DESC LIMIT 20`,
+      [tgId]
+    )
+    res.json(rows)
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 export default router
 
 // POST /api/trading/result — записать результат реального трейда (фронт знает результат по BTC)
@@ -97,7 +111,7 @@ router.post('/result', async (req, res) => {
   try {
     const tgId = req.telegramUser.id
     const { amount, won } = req.body
-    if (!amount || won === undefined) return res.status(400).json({ error: 'Invalid params' })
+    if (!amount) return res.status(400).json({ error: 'Invalid params' })
 
     const betAmount = parseFloat(amount)
     await client.query('BEGIN')
@@ -111,16 +125,20 @@ router.post('/result', async (req, res) => {
     await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [betAmount, user.id])
 
     let profit = 0
-    if (won) {
+    if (won === null) {
+      // Возврат средств — цена не изменилась
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',0,'🔄 Трейдинг TON: возврат')", [user.id])
+      profit = betAmount
+    } else if (won) {
       profit = betAmount * multiplier
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [profit, user.id])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
-        [user.id, profit - betAmount, `📈 Трейдинг BTC: +${(profit-betAmount).toFixed(4)} TON`])
+        [user.id, profit - betAmount, `📈 Трейдинг TON: +${(profit-betAmount).toFixed(4)} TON`])
     } else {
       const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
       if (admin) await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betAmount, admin.id])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
-        [user.id, -betAmount, `📉 Трейдинг BTC: -${betAmount.toFixed(4)} TON`])
+        [user.id, -betAmount, `📉 Трейдинг TON: -${betAmount.toFixed(4)} TON`])
     }
 
     await client.query('COMMIT')
