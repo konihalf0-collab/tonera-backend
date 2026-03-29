@@ -21,7 +21,7 @@ router.post('/bet', async (req, res) => {
   const client = await pool.connect()
   try {
     const tgId = req.telegramUser.id
-    const { amount, direction } = req.body // direction: 'up' | 'down'
+    const { amount, direction, force_result } = req.body
     if (!amount || !['up','down'].includes(direction)) return res.status(400).json({ error: 'Invalid params' })
 
     const { rows: settings } = await client.query(
@@ -40,12 +40,8 @@ router.post('/bet', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' })
     if (parseFloat(user.balance_ton) < parseFloat(amount)) return res.status(400).json({ error: 'Недостаточно средств' })
 
-    // Случайный результат
-    const rand = Math.random() * 100
-    const win = rand <= winChance
-    const finalPrice = win ? (direction === 'up' ? 1 : -1) : (direction === 'up' ? -1 : 1)
-    // finalPrice > 0 означает рост, < 0 — падение
-    const userWon = (direction === 'up' && finalPrice > 0) || (direction === 'down' && finalPrice < 0)
+    // Результат — либо реальный BTC либо случайный
+    const userWon = force_result !== undefined ? force_result : (Math.random() * 100 <= winChance)
 
     const betAmount = parseFloat(amount)
     await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [betAmount, user.id])
@@ -55,13 +51,12 @@ router.post('/bet', async (req, res) => {
       profit = betAmount * multiplier
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [profit, user.id])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
-        [user.id, profit - betAmount, `📈 Трейдинг: +${(profit-betAmount).toFixed(4)} TON`])
+        [user.id, profit - betAmount, `📈 Трейдинг BTC: +${(profit-betAmount).toFixed(4)} TON`])
     } else {
-      // Комиссия проекту
       const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
       if (admin) await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betAmount, admin.id])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
-        [user.id, -betAmount, `📉 Трейдинг: -${betAmount.toFixed(4)} TON`])
+        [user.id, -betAmount, `📉 Трейдинг BTC: -${betAmount.toFixed(4)} TON`])
     }
 
     await client.query('COMMIT')
