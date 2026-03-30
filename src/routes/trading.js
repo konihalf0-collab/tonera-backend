@@ -73,10 +73,11 @@ router.post('/result', async (req, res) => {
       const { rows: [bankCheck] } = await client.query("SELECT value FROM settings WHERE key='trading_bank'")
       const bankNow = parseFloat(bankCheck?.value || 0)
       if (bankNow < profit) {
-        // Банк пустой — отключаем и возвращаем ставку
+        // Возвращаем ставку, коммитим транзакцию
         await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betAmount, user.id])
-        await client.query("UPDATE settings SET value='0' WHERE key='trading_enabled'")
-        await client.query('ROLLBACK')
+        await client.query('COMMIT')
+        // Отключаем ПОСЛЕ коммита
+        await pool.query("UPDATE settings SET value='0' WHERE key='trading_enabled'")
         try {
           const { getBot } = await import('../bot.js')
           const bot = getBot()
@@ -98,7 +99,9 @@ router.post('/result', async (req, res) => {
       // Проверяем банк
       const { rows: [bankRow] } = await client.query("SELECT value FROM settings WHERE key='trading_bank'")
       if (parseFloat(bankRow?.value || 0) <= 0) {
-        await client.query("UPDATE settings SET value='0' WHERE key='trading_enabled'")
+        // Коммитим сначала, потом отключаем
+        await client.query('COMMIT')
+        await pool.query("UPDATE settings SET value='0' WHERE key='trading_enabled'")
         try {
           const { getBot } = await import('../bot.js')
           const bot = getBot()
