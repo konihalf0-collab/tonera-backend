@@ -68,8 +68,28 @@ router.post('/result', async (req, res) => {
         [user.id, betNet, `🔄 refund:${betNet.toFixed(4)}`])
       profit = betNet
     } else if (won) {
-      // Выигрыш — выплата из банка
+      // Выигрыш — проверяем банк
       profit = betAmount * multiplier
+      const { rows: [bankCheck] } = await client.query("SELECT value FROM settings WHERE key='trading_bank'")
+      const bankNow = parseFloat(bankCheck?.value || 0)
+      if (bankNow < profit) {
+        // Банк пустой — отключаем и возвращаем ставку
+        await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betAmount, user.id])
+        await client.query("UPDATE settings SET value='0' WHERE key='trading_enabled'")
+        await client.query('ROLLBACK')
+        try {
+          const { getBot } = await import('../bot.js')
+          const bot = getBot()
+          if (bot) await bot.sendMessage(ADMIN_TG_ID,
+            `⚠️ *БАНК ТРЕЙДИНГА ПУСТОЙ*
+
+Трейдинг автоматически отключён.
+Пополните банк и включите вручную.`,
+            { parse_mode: 'Markdown' }
+          )
+        } catch {}
+        return res.status(400).json({ error: 'Трейдинг недоступен — банк пуст', disabled: true })
+      }
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [profit, user.id])
       await client.query("UPDATE settings SET value=CAST(GREATEST(CAST(value AS DECIMAL)-$1,0) AS TEXT) WHERE key='trading_bank'", [profit])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
