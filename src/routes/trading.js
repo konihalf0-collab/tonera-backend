@@ -31,8 +31,13 @@ router.post('/result', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' })
 
     const { rows: settings } = await client.query(
-      "SELECT key, value FROM settings WHERE key IN ('trading_multiplier','trading_bank','trading_profit_fee','trading_commission')"
+      "SELECT key, value FROM settings WHERE key IN ('trading_enabled','trading_multiplier','trading_bank','trading_profit_fee','trading_commission')"
     )
+    const enabledStatus = settings.find(s => s.key === 'trading_enabled')?.value || '1'
+    if (enabledStatus !== '1') {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Трейдинг недоступен', disabled: true })
+    }
     const pct = parseFloat(settings.find(s => s.key === 'trading_multiplier')?.value || 90)
     const multiplier = pct > 10 ? 1 + pct / 100 : pct
     const profitFeePct = parseFloat(settings.find(s => s.key === 'trading_profit_fee')?.value || 10) / 100
@@ -77,7 +82,7 @@ router.post('/result', async (req, res) => {
         await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betAmount, user.id])
         await client.query('COMMIT')
         // Отключаем ПОСЛЕ коммита
-        await pool.query("UPDATE settings SET value='0' WHERE key='trading_enabled'")
+        await pool.query("UPDATE settings SET value='2' WHERE key='trading_enabled'")
         try {
           const { getBot } = await import('../bot.js')
           const bot = getBot()
@@ -101,7 +106,7 @@ router.post('/result', async (req, res) => {
       if (parseFloat(bankRow?.value || 0) <= 0) {
         // Коммитим сначала, потом отключаем
         await client.query('COMMIT')
-        await pool.query("UPDATE settings SET value='0' WHERE key='trading_enabled'")
+        await pool.query("UPDATE settings SET value='2' WHERE key='trading_enabled'")
         try {
           const { getBot } = await import('../bot.js')
           const bot = getBot()
