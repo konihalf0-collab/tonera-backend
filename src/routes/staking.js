@@ -119,9 +119,7 @@ router.post('/unstake/:stakeId', async (req, res) => {
       // Реальный вывод — начисляем баланс и пишем в историю
       await client.query('UPDATE users SET balance_ton = balance_ton + $1 WHERE id = $2', [returnAmount, stake.uid])
       await client.query(
-        `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'reward', $2, $3)`,
-        [stake.uid, returnAmount, label]
-      )
+        `INSERT INTO transactions (user_id, type, amount, label) VALUES ($1, 'collect', $2, $3)`,
     }
 
     await client.query(`UPDATE stakes SET status = 'completed', earned = $1 WHERE id = $2`, [earned, stakeId])
@@ -206,7 +204,7 @@ router.post('/withdraw', async (req, res) => {
     }
 
     await client.query(
-      `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,$3)`,
+      `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'collect',$2,$3)`,
       [stake.uid, netWithdraw, fee > 0 ? `Вывод из стейка (комиссия ${(feePercent*100).toFixed(0)}%)` : 'Вывод из стейка']
     )
 
@@ -246,7 +244,7 @@ router.post('/collect/:stakeId', async (req, res) => {
     await client.query('UPDATE stakes SET earned=0, started_at=NOW() WHERE id=$1', [stakeId])
 
     await client.query(
-      `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'reward',$2,'Сбор дохода')`,
+      `INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'collect',$2,'Сбор дохода')`,
       [stake.uid, earned]
     )
 
