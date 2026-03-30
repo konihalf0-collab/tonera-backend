@@ -127,7 +127,7 @@ router.post('/result', async (req, res) => {
     let profit = 0
     if (won === null) {
       // Возврат средств — цена не изменилась
-      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',0,'🔄 Трейдинг TON: возврат')", [user.id])
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)", [user.id, betAmount, `🔄 refund:${betAmount.toFixed(4)}`])
       profit = betAmount
     } else if (won) {
       profit = betAmount * multiplier
