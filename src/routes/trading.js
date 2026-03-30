@@ -78,10 +78,16 @@ router.post('/result', async (req, res) => {
       const { rows: [bankCheck] } = await client.query("SELECT value FROM settings WHERE key='trading_bank'")
       const bankNow = parseFloat(bankCheck?.value || 0)
       if (bankNow < profit) {
-        // Возвращаем ставку, коммитим транзакцию
+        // Возвращаем ПОЛНУЮ ставку (включая комиссию), коммитим
         await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betAmount, user.id])
+        // Откатываем комиссию с банка и у тебя
+        await client.query("UPDATE settings SET value=CAST(GREATEST(CAST(value AS DECIMAL)-$1,0) AS TEXT) WHERE key='trading_bank'", [commissionToBank])
+        if (admin && commissionProfit > 0) {
+          await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [commissionProfit, admin.id])
+        }
+        await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
+          [user.id, betAmount, `🔄 refund:${betAmount.toFixed(4)}:tech`])
         await client.query('COMMIT')
-        // Отключаем ПОСЛЕ коммита
         await pool.query("UPDATE settings SET value='2' WHERE key='trading_enabled'")
         try {
           const { getBot } = await import('../bot.js')
