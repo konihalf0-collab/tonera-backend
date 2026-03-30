@@ -46,7 +46,13 @@ router.get('/stats', adminOnly, async (req, res) => {
         (SELECT COALESCE(SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) - SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) FROM transactions WHERE type='spin_result') as spin_revenue,
         (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='spin_profit') as spin_profit,
         (SELECT value FROM settings WHERE key='spin_jackpot') as current_jackpot,
-        (SELECT value FROM settings WHERE key='spin_pool') as spin_pool
+        (SELECT value FROM settings WHERE key='spin_pool') as spin_pool,
+        (SELECT COUNT(*) FROM transactions WHERE type='trading') as trading_total,
+        (SELECT COUNT(*) FROM transactions WHERE type='trading' AND amount > 0 AND label LIKE '📈%') as trading_wins,
+        (SELECT COUNT(*) FROM transactions WHERE type='trading' AND amount < 0) as trading_loses,
+        (SELECT COUNT(*) FROM transactions WHERE type='trading' AND label LIKE '🔄%') as trading_refunds,
+        (SELECT value FROM settings WHERE key='trading_bank') as trading_bank,
+        (SELECT COALESCE(SUM(amount),0) FROM transactions WHERE type='trading_profit') as trading_profit
     `)
     res.json(stats)
   } catch (e) { res.status(500).json({ error: e.message }) }
