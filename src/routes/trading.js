@@ -133,12 +133,12 @@ router.post('/result', async (req, res) => {
       profit = betAmount * multiplier
       await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [profit, user.id])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
-        [user.id, profit - betAmount, `📈 Трейдинг TON: +${(profit-betAmount).toFixed(4)} TON`])
+        [user.id, profit, `📈 win:${profit.toFixed(4)}:bet:${betAmount.toFixed(4)}`])
     } else {
       const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
       if (admin) await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betAmount, admin.id])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
-        [user.id, -betAmount, `📉 Трейдинг TON: -${betAmount.toFixed(4)} TON`])
+        [user.id, -betAmount, `📉 lose:${betAmount.toFixed(4)}`])
     }
 
     await client.query('COMMIT')
