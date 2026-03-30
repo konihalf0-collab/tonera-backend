@@ -119,7 +119,9 @@ router.post('/result', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' })
 
     const { rows: [ms] } = await client.query("SELECT value FROM settings WHERE key='trading_multiplier'")
-    const multiplier = parseFloat(ms?.value || 1.9)
+    const multiplierRaw = parseFloat(ms?.value || 90)
+    // Если значение > 10 — это проценты, конвертируем в коэффициент
+    const multiplier = multiplierRaw > 10 ? 1 + multiplierRaw / 100 : multiplierRaw
 
     // Списываем ставку
     await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [betAmount, user.id])
