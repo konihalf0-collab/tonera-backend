@@ -117,6 +117,7 @@ export async function runMigrations() {
       ('trading_enabled',    '1'),
       ('trading_multiplier', '90'),
       ('trading_bank',        '0'),
+      ('trading_commission',  '5'),
       ('trading_profit_fee', '10'),
       ('spin_sectors',        '[{"label":"😢 Ничего","type":"nothing","value":0,"chance":35},{"label":"💎 0.01 TON","type":"ton","value":0.01,"chance":25},{"label":"💎 0.05 TON","type":"ton","value":0.05,"chance":20},{"label":"💎 0.1 TON","type":"ton","value":0.1,"chance":12},{"label":"💎 0.5 TON","type":"ton","value":0.5,"chance":5},{"label":"💎 1 TON","type":"ton","value":1,"chance":2},{"label":"🎰 ДЖЕКПОТ","type":"jackpot","value":0,"chance":1}]'),
       ('min_collect',         '0.001'),

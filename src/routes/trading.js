@@ -8,9 +8,9 @@ const router = Router()
 router.get('/info', async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT key, value FROM settings WHERE key IN ('trading_enabled','trading_multiplier','trading_bank','trading_profit_fee')"
+      "SELECT key, value FROM settings WHERE key IN ('trading_enabled','trading_multiplier','trading_bank','trading_profit_fee','trading_commission')"
     )
-    const d = { trading_enabled:'1', trading_multiplier:'90', trading_bank:'0', trading_profit_fee:'10' }
+    const d = { trading_enabled:'1', trading_multiplier:'90', trading_bank:'0', trading_profit_fee:'10', trading_commission:'5' }
     rows.forEach(r => { d[r.key] = r.value })
     res.json(d)
   } catch (e) { res.status(500).json({ error: e.message }) }
@@ -31,48 +31,53 @@ router.post('/result', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' })
 
     const { rows: settings } = await client.query(
-      "SELECT key, value FROM settings WHERE key IN ('trading_multiplier','trading_bank','trading_profit_fee')"
+      "SELECT key, value FROM settings WHERE key IN ('trading_multiplier','trading_bank','trading_profit_fee','trading_commission')"
     )
     const pct = parseFloat(settings.find(s => s.key === 'trading_multiplier')?.value || 90)
     const multiplier = pct > 10 ? 1 + pct / 100 : pct
-    const bank = parseFloat(settings.find(s => s.key === 'trading_bank')?.value || 0)
     const profitFeePct = parseFloat(settings.find(s => s.key === 'trading_profit_fee')?.value || 10) / 100
+    const commissionPct = parseFloat(settings.find(s => s.key === 'trading_commission')?.value || 5) / 100
 
     // Списываем ставку
     await client.query('UPDATE users SET balance_ton=balance_ton-$1 WHERE id=$2', [betAmount, user.id])
 
+    // Комиссия с каждой ставки
+    const commission = betAmount * commissionPct
+    const betNet = betAmount - commission // ставка после комиссии
+
+    // Комиссия делится: % прибыли — тебе, остаток — в банк
+    const commissionProfit = commission * profitFeePct
+    const commissionToBank = commission - commissionProfit
+
+    const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
+
+    // Комиссия в банк
+    await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='trading_bank'", [commissionToBank])
+    // Прибыль с комиссии — тебе
+    if (admin && commissionProfit > 0) {
+      await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [commissionProfit, admin.id])
+      await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading_profit',$2,'Комиссия трейдинг')", [admin.id, commissionProfit])
+    }
+
     let profit = 0
 
     if (won === null) {
-      // Возврат — банк не меняется
-      await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betAmount, user.id])
+      // Возврат — возвращаем betNet (без комиссии)
+      await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [betNet, user.id])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
-        [user.id, betAmount, `🔄 refund:${betAmount.toFixed(4)}`])
-      profit = betAmount
+        [user.id, betNet, `🔄 refund:${betNet.toFixed(4)}`])
+      profit = betNet
     } else if (won) {
-      // Выигрыш — выплачиваем из банка
+      // Выигрыш — выплата из банка
       profit = betAmount * multiplier
-      const profitOnly = profit - betAmount
-      // Процент прибыли проекту
-      const projectCut = profitOnly * profitFeePct
-      const userPayout = profit - projectCut
-
-      await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [userPayout, user.id])
-      // Уменьшаем банк на выплату
-      await client.query("UPDATE settings SET value=CAST(GREATEST(CAST(value AS DECIMAL)-$1,0) AS TEXT) WHERE key='trading_bank'", [profitOnly])
-      // Прибыль проекту
-      const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
-      if (admin && projectCut > 0) {
-        await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [projectCut, admin.id])
-        await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading_profit',$2,'Прибыль трейдинг')", [admin.id, projectCut])
-      }
+      await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [profit, user.id])
+      await client.query("UPDATE settings SET value=CAST(GREATEST(CAST(value AS DECIMAL)-$1,0) AS TEXT) WHERE key='trading_bank'", [profit])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
-        [user.id, userPayout, `📈 win:${userPayout.toFixed(4)}:bet:${betAmount.toFixed(4)}`])
+        [user.id, profit, `📈 win:${profit.toFixed(4)}:bet:${betAmount.toFixed(4)}`])
 
-      // Проверяем банк — если стал 0, отключаем трейдинг и уведомляем
+      // Проверяем банк
       const { rows: [bankRow] } = await client.query("SELECT value FROM settings WHERE key='trading_bank'")
-      const newBank = parseFloat(bankRow?.value || 0)
-      if (newBank <= 0) {
+      if (parseFloat(bankRow?.value || 0) <= 0) {
         await client.query("UPDATE settings SET value='0' WHERE key='trading_enabled'")
         try {
           const { getBot } = await import('../bot.js')
@@ -84,16 +89,8 @@ router.post('/result', async (req, res) => {
         } catch {}
       }
     } else {
-      // Проигрыш — пополняем банк
-      const profitFee = betAmount * profitFeePct
-      const toBank = betAmount - profitFee
-      await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='trading_bank'", [toBank])
-      // Прибыль проекту сразу
-      const { rows: [admin] } = await client.query('SELECT * FROM users WHERE telegram_id=$1', [ADMIN_TG_ID])
-      if (admin && profitFee > 0) {
-        await client.query('UPDATE users SET balance_ton=balance_ton+$1 WHERE id=$2', [profitFee, admin.id])
-        await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading_profit',$2,'Прибыль трейдинг')", [admin.id, profitFee])
-      }
+      // Проигрыш — betNet идёт в банк
+      await client.query("UPDATE settings SET value=CAST(CAST(value AS DECIMAL)+$1 AS TEXT) WHERE key='trading_bank'", [betNet])
       await client.query("INSERT INTO transactions (user_id,type,amount,label) VALUES ($1,'trading',$2,$3)",
         [user.id, -betAmount, `📉 lose:${betAmount.toFixed(4)}`])
     }
